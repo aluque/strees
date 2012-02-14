@@ -61,6 +61,7 @@ mp_array *mp_expand (int maxl, mp_array *r, mp_array *q, int inout);
 double mp_eval (int maxl, mp_array *lm, 
 		double x, double y, double z, int inout);
 mp_array *mp_eval_array (mp_array* lm, mp_array *r,  int inout);
+mp_array *mp_eval_field_array (mp_array* lm, mp_array *r,  int inout);
 mp_array *mp_shift (double x, double y, double z, 
 		    int inout, mp_array *lm);
 mp_array *mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a);

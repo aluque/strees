@@ -70,7 +70,6 @@ evaluate (PyObject *self, PyObject *args)
   return PyFloat_FromDouble (res);
 }
 
-/* Adds a multipolar expansion to an array. */
 static PyObject *
 evaluate_array (PyObject *self, PyObject *args)
 {
@@ -94,6 +93,31 @@ evaluate_array (PyObject *self, PyObject *args)
   
   return PyArray_Return (res);
 }
+
+static PyObject *
+evaluate_field_array (PyObject *self, PyObject *args)
+{
+  int inout;
+
+  PyArrayObject *r, *lm, *res;
+
+  if (!PyArg_ParseTuple(args, "O!O!i",
+			&PyArray_Type, &lm, 
+			&PyArray_Type, &r,
+			&inout))
+    return NULL;
+
+  if (lm->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "The array of coefficients must have dimension 2.");
+     return NULL;
+  }
+
+  res = mp_eval_field_array (lm, r, inout);
+  
+  return PyArray_Return (res);
+}
+
 
 /* Shifts a multipolar expansion to a given point. */
 static PyObject *
@@ -328,6 +352,8 @@ static PyMethodDef mpMethods[] = {
      "Evauates a multipolar expansion at a given point"},
     {"eval_array",  evaluate_array, METH_VARARGS,
      "Evauates a multipolar expansion for all points of a given array"},
+    {"eval_field_array",  evaluate_array, METH_VARARGS,
+     "Evauates a field from a multipolar expansion for all points of a given array"},
     {"shift",  shift_expansion, METH_VARARGS,
      "Shifts a multipolar expansion to a new point"},
     {"direct",  direct, METH_VARARGS,

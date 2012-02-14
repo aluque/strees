@@ -353,6 +353,135 @@ mp_eval_array (mp_array* lm, mp_array *r,  int inout)
   return phi;
 }
 
+
+/* Evaluates a the electric field from multipolar expansion at each 
+   point of a given array and adds the result to that array.  
+   The parameters are the same as for mp_eval_array.
+*/
+mp_array*
+mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
+{
+  int i;
+  int l, m;
+  mp_intp k, dim[2];
+  int maxl;
+  double complex *term;
+  mp_array *field;
+
+  /* This is the order of the expansion. */
+  maxl = mp_array_dim(lm, 0);
+
+  /* This is the number of points. */
+  k = mp_array_dim(r, 1);
+
+  dim[0] = 3;
+  dim[1] = k;
+    
+  field = (mp_array*) (mp_array_from_dims (1, dim, mp_DOUBLE));
+
+  for (i = 0; i < k; i++) {
+    double x, y, z, rho, rhoxy;
+    double sintheta, costheta;
+    double rpow, erho, etheta, ephi, *ptr;
+    
+    x = * (double*) mp_array_getptr2(r, X, i);
+    y = * (double*) mp_array_getptr2(r, Y, i);
+    z = * (double*) mp_array_getptr2(r, Z, i);
+
+    rho = sqrt(x * x + y * y + z * z);
+    rhoxy = sqrt(x * x + y * y);
+
+    sintheta = y / rhoxy;
+    costheta = x / rhoxy;
+
+    if (rho != 0) {
+      mp_lplm (maxl + 1, maxl + 1, z / rho);
+      mp_phase_factor (maxl, x, y);
+    } else {
+      mp_lplm (maxl + 1, maxl + 1, 0.0);
+      mp_phase_factor (maxl, 0.0, 0.0);
+    }
+    
+    erho = etheta = ephi = 0.0;
+
+    /* inout < 0 means inward expansion; inout > 0 means 
+       outward expansion. */
+    rpow = (inout > 0)? (1.0 / rho / rho): 1.0 / rho;
+
+    for (l = 0; l < maxl; l++) {
+      double erho, etheta, ephi;
+      double msum_rho, msum_phi, msum_theta;
+      int g, sign;
+      complex double *c;
+
+
+      /* First we set the values for m=0 */
+      c = (complex double *) (lm->data + l * lm->strides[0]);
+
+      msum_rho = lp[l * maxl] * creal (*c) * prefact[l][0];
+      msum_phi = 0.0;
+
+      c = (complex double *) (lm->data + l * lm->strides[0] + lm->strides[1]);
+      msum_theta = -(l + 1) * lp[l * maxl] * creal (*c) * prefact[l][0];
+
+      for (m = 1, sign = -1; m <= l; m++, sign = -sign) {
+	c = (complex double *) (lm->data + l * lm->strides[0] + 
+				m * lm->strides[1]);
+
+	/* TODO: Dont be silly as if you do not know what is z + conj(z). */
+ 	msum_rho += (lp[l * maxl + m] * creal (phases[m] * (*c)) 
+		    * prefact[l][m]);
+
+	msum_rho += (lp[l * maxl + m] * creal (conj(phases[m]) * conj(*c)) 
+		     * prefact[l][m]);
+
+
+	msum_phi += m * (lp[l * maxl + m] * creal (1j * phases[m] * (*c)) 
+			 * prefact[l][m]);
+
+	msum_phi += m * (lp[l * maxl + m] * creal (1j * conj(phases[m]) 
+						   * conj(*c)) 
+			 * prefact[l][m]);
+
+
+	msum_theta += (prefact[l][m] * creal(phases[m] * (*c)) *
+		       ((l + 1) * z / rho * lp[l * maxl + m] 
+			- (l + 1 - m) * lp[(l + 1) * maxl + m]));
+
+	msum_theta += (prefact[l][m] * creal(~phases[m] * ~(*c)) *
+		       ((l + 1) * z / rho * lp[l * maxl + m] 
+			- (l + 1 - m) * lp[(l + 1) * maxl + m]));
+
+
+      }
+      g = (inout > 0)? -(l + 1) : l;
+
+      erho += g * msum_rho * rpow;
+      ephi += msum_phi * rpow / sintheta;
+      etheta += msum_theta * rpow / sintheta;
+
+      rpow = (inout > 0)? (rpow / rho): rpow * rho;
+    }
+
+    /* X */
+    ptr = (double *) mp_array_getptr2(field, X, i);
+    *ptr = (erho * x / rho - etheta * sintheta + ephi * x * z / rho / rhoxy);
+
+    /* Y */
+    ptr = (double *) mp_array_getptr2(field, Y, i);
+    *ptr = (erho * y / rho + etheta * costheta + ephi * y * z / rho / rhoxy);
+
+    /* Z */
+    ptr = (double *) mp_array_getptr2(field, Z, i);
+    *ptr = (erho * z / rho - ephi * rhoxy / rho);
+
+  }
+
+  return field;
+}
+
+
+
 /* Shifts a multipolar expansion to a given point. 
       inout > 0  -> Shifts an outward expansion
       inout < 0  -> Shifts an inward expansion

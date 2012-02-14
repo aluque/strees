@@ -489,47 +489,6 @@ shift_inward (int maxl, double r, mp_array *lm, mp_array *res)
 }
 
 
-/*  Does the hard computations for the transformation OUTWARD - INWARD. */
-static void
-old_out_to_in (int maxl, double r, mp_array *lm, mp_array *res)
-{
-  int j, k; 
-  double rpowj;
-
-  rpowj = 1.0 / r;
-  for (j = 0; j < maxl; j++) {
-    for (k = 0; k <= j; k++) {
-      double complex sum, *to;
-      double rpow;
-      int l, m;
-
-      rpow = rpowj;
-      sum = 0;
-      for (l = 0; l < maxl; l++) {
-	for (m = -l; m <= l; m++) {
-	  complex double *c, cval, ph;
-	  if ((l + j) < maxl && abs (m - k) <= (l + j)) {
-	    c = mp_array_getptr2 (lm, l, abs(m));
-
-	    cval = (m > 0) ? (*c): ~(*c);
-	    ph = ((m - k) > 0)? phases[m - k]: ~phases[k - m];
-	    
-	    sum += iklm (k - m, k, m) * rpow
-	      * trans[l][l - m] / trans[l + j][l + j - m + k] 
-	      * lp[(l + j) * maxl + abs(m - k)] 
-	      * ph * prefact[l + j][abs(m - k)] * cval;
-	  }
-	}
-
-	rpow /= -r;
-      }
-      to = (complex double *) mp_array_getptr2 (res, j, k); 
-      *to = sum * trans[j][j - k];
-    }
-    rpowj /= r;
-  }
-}
-
 
 /*  Does the hard computations for the transformation OUTWARD - INWARD. */
 static void

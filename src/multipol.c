@@ -437,29 +437,17 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
 	c = (complex double *) (lm->data + l * lm->strides[0] + 
 				m * lm->strides[1]);
 
-	/* TODO: Dont be silly as if you do not know what is z + conj(z). */
- 	msum_rho += (lp[l * maxl1 + m] * creal (phases[m] * (*c)) 
+	/* The expressions here are simplified to add in one iteration
+	   the values corresponding to m and -m. */
+ 	msum_rho += 2 * (lp[l * maxl1 + m] * creal (phases[m] * (*c)) 
 		    * prefact[l][m]);
 
-	msum_rho += (lp[l * maxl1 + m] * creal (conj(phases[m]) * conj(*c)) 
-		     * prefact[l][m]);
-
-
-	msum_phi += m * (lp[l * maxl1 + m] * creal (1j * phases[m] * (*c)) 
+	msum_phi -= 2 * m * (lp[l * maxl1 + m] * cimag (phases[m] * (*c)) 
 			 * prefact[l][m]);
 
-	msum_phi += -m * (lp[l * maxl1 + m] * creal (1j * conj(phases[m]) 
-						   * conj(*c)) 
-			 * prefact[l][m]);
-
-
-	msum_theta += -(prefact[l][m] * creal(phases[m] * (*c)) *
-		       ((l + 1) * z / rho * lp[l * maxl1 + m] 
-			- (l + 1 - m) * lp[(l + 1) * maxl1 + m]));
-
-	msum_theta += -(prefact[l][m] * creal(~phases[m] * ~(*c)) *
-		       ((l + 1) * z / rho * lp[l * maxl1 + m] 
-			- (l + 1 - m) * lp[(l + 1) * maxl1 + m]));
+	msum_theta -= 2 * (prefact[l][m] * creal(phases[m] * (*c)) *
+			    ((l + 1) * z / rho * lp[l * maxl1 + m] 
+			     - (l + 1 - m) * lp[(l + 1) * maxl1 + m]));
 
       }
       g = (inout > 0)? -(l + 1) : l;

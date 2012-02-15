@@ -16,14 +16,14 @@ def test():
     k = 200
     p = 20
     
-    r = random.uniform(-1, 1, size=(3, k))
-    q = random.uniform(-1.0, 1.0, size=k)
+    # r = random.uniform(-1, 1, size=(3, k))
+    # q = random.uniform(-1.0, 1.0, size=k)
 
-    # r = array([[0.3, 0.2, 0.1]]).T
+    r = array([[0.3, 0.2, 0.1]]).T
     
-    # q = array([1.0])
+    q = array([1.0])
     
-    reval = array([[2.0, 3.0, 1.0]]).T
+    reval = array([[1.0, 2.0, 1.0]]).T
     
     M = mpolar.expand(p, r, q, OUTWARD)
     print M

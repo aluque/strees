@@ -19,28 +19,22 @@ def test():
     r = random.uniform(-1, 1, size=(3, k))
     q = random.uniform(-1.0, 1.0, size=k)
 
-    r0 = array([5.0, 5.0, 5.0])
-    r_new = (r + r0[:, newaxis])
+    # r = array([[0.3, 0.2, 0.1]]).T
     
-    reval = array([[1.0, 1.5, 0.5]]).T
+    # q = array([1.0])
+    
+    reval = array([[2.0, 3.0, 1.0]]).T
     
     M = mpolar.expand(p, r, q, OUTWARD)
-
-    M_new = mpolar.shift((r0[X], r0[Y], r0[Z]), INOUT, M)
-    M_direct = mpolar.expand(p, r_new, q, INWARD)
-
-    phi = mpolar.eval_array(M_new, reval, INWARD) 
-    phi2 = fmm_3d.brute(q, r_new, reval)
-    phi3 = mpolar.direct(r_new, q, reval)
+    print M
     
-    print phi
-    print phi2
-    print phi3
-
-    print M_new[4, :]
-    print M_direct[4, :]
+    ef = mpolar.eval_field_array(M, reval, OUTWARD) 
+    ef_0 = mpolar.field_direct(r, q, reval, 0.0)
     
-
+    print ef, norm(ef)
+    print ef_0, norm(ef_0)
+    
+    print M[:, 0]
 
 if __name__ == '__main__':
     test()

@@ -381,9 +381,10 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
 
   for (i = 0; i < k; i++) {
     double x, y, z, rho, rhoxy;
-    double sintheta, costheta;
+    double sinphi, cosphi, csctheta;
     double rpow, erho, etheta, ephi, *ptr;
-    
+    int maxl1;
+
     x = * (double*) mp_array_getptr2(r, X, i);
     y = * (double*) mp_array_getptr2(r, Y, i);
     z = * (double*) mp_array_getptr2(r, Z, i);
@@ -391,8 +392,13 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
     rho = sqrt(x * x + y * y + z * z);
     rhoxy = sqrt(x * x + y * y);
 
-    sintheta = y / rhoxy;
-    costheta = x / rhoxy;
+    if (rhoxy > 0) {
+      sinphi = y / rhoxy;
+      cosphi = x / rhoxy;
+      csctheta = rho / rhoxy;
+    } else {
+      sinphi = cosphi = csctheta = 0.0;
+    }
 
     if (rho != 0) {
       mp_lplm (maxl + 1, maxl + 1, z / rho);
@@ -401,7 +407,11 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
       mp_lplm (maxl + 1, maxl + 1, 0.0);
       mp_phase_factor (maxl, 0.0, 0.0);
     }
-    
+
+    /* We need on more l to calculate derivatives.  In the lp matrix we 
+       have to use maxl1. */
+    maxl1 = maxl + 1;
+
     erho = etheta = ephi = 0.0;
 
     /* inout < 0 means inward expansion; inout > 0 means 
@@ -409,71 +419,70 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
     rpow = (inout > 0)? (1.0 / rho / rho): 1.0 / rho;
 
     for (l = 0; l < maxl; l++) {
-      double erho, etheta, ephi;
       double msum_rho, msum_phi, msum_theta;
-      int g, sign;
+      int g;
       complex double *c;
-
 
       /* First we set the values for m=0 */
       c = (complex double *) (lm->data + l * lm->strides[0]);
 
-      msum_rho = lp[l * maxl] * creal (*c) * prefact[l][0];
+      msum_rho = lp[l * maxl1] * creal (*c) * prefact[l][0];
       msum_phi = 0.0;
 
-      c = (complex double *) (lm->data + l * lm->strides[0] + lm->strides[1]);
-      msum_theta = -(l + 1) * lp[l * maxl] * creal (*c) * prefact[l][0];
-
-      for (m = 1, sign = -1; m <= l; m++, sign = -sign) {
+      msum_theta = (-(l + 1) * z * lp[l * maxl1] / rho
+		    +(l + 1) * lp[(l + 1) * maxl1]) 
+		    * creal (*c) * prefact[l][0];
+      
+      for (m = 1; m <= l; m++) {
 	c = (complex double *) (lm->data + l * lm->strides[0] + 
 				m * lm->strides[1]);
 
 	/* TODO: Dont be silly as if you do not know what is z + conj(z). */
- 	msum_rho += (lp[l * maxl + m] * creal (phases[m] * (*c)) 
+ 	msum_rho += (lp[l * maxl1 + m] * creal (phases[m] * (*c)) 
 		    * prefact[l][m]);
 
-	msum_rho += (lp[l * maxl + m] * creal (conj(phases[m]) * conj(*c)) 
+	msum_rho += (lp[l * maxl1 + m] * creal (conj(phases[m]) * conj(*c)) 
 		     * prefact[l][m]);
 
 
-	msum_phi += m * (lp[l * maxl + m] * creal (1j * phases[m] * (*c)) 
+	msum_phi += m * (lp[l * maxl1 + m] * creal (1j * phases[m] * (*c)) 
 			 * prefact[l][m]);
 
-	msum_phi += m * (lp[l * maxl + m] * creal (1j * conj(phases[m]) 
+	msum_phi += -m * (lp[l * maxl1 + m] * creal (1j * conj(phases[m]) 
 						   * conj(*c)) 
 			 * prefact[l][m]);
 
 
-	msum_theta += (prefact[l][m] * creal(phases[m] * (*c)) *
-		       ((l + 1) * z / rho * lp[l * maxl + m] 
-			- (l + 1 - m) * lp[(l + 1) * maxl + m]));
+	msum_theta += -(prefact[l][m] * creal(phases[m] * (*c)) *
+		       ((l + 1) * z / rho * lp[l * maxl1 + m] 
+			- (l + 1 - m) * lp[(l + 1) * maxl1 + m]));
 
-	msum_theta += (prefact[l][m] * creal(~phases[m] * ~(*c)) *
-		       ((l + 1) * z / rho * lp[l * maxl + m] 
-			- (l + 1 - m) * lp[(l + 1) * maxl + m]));
-
+	msum_theta += -(prefact[l][m] * creal(~phases[m] * ~(*c)) *
+		       ((l + 1) * z / rho * lp[l * maxl1 + m] 
+			- (l + 1 - m) * lp[(l + 1) * maxl1 + m]));
 
       }
       g = (inout > 0)? -(l + 1) : l;
-
+      
       erho += g * msum_rho * rpow;
-      ephi += msum_phi * rpow / sintheta;
-      etheta += msum_theta * rpow / sintheta;
+
+      ephi += csctheta * msum_phi * rpow;
+      etheta += csctheta * msum_theta * rpow;
 
       rpow = (inout > 0)? (rpow / rho): rpow * rho;
     }
 
     /* X */
-    ptr = (double *) mp_array_getptr2(field, X, i);
-    *ptr = (erho * x / rho - etheta * sintheta + ephi * x * z / rho / rhoxy);
+    ptr = (double *) mp_array_getptr2 (field, X, i);
+    *ptr = (erho * x / rho + etheta * cosphi * z / rho - ephi * sinphi);
 
     /* Y */
-    ptr = (double *) mp_array_getptr2(field, Y, i);
-    *ptr = (erho * y / rho + etheta * costheta + ephi * y * z / rho / rhoxy);
+    ptr = (double *) mp_array_getptr2 (field, Y, i);
+    *ptr = (erho * y / rho + etheta * sinphi * z / rho + ephi * cosphi);
 
     /* Z */
-    ptr = (double *) mp_array_getptr2(field, Z, i);
-    *ptr = (erho * z / rho - ephi * rhoxy / rho);
+    ptr = (double *) mp_array_getptr2 (field, Z, i);
+    *ptr = (erho * z / rho - etheta * rhoxy / rho);
 
   }
 

@@ -352,7 +352,7 @@ static PyMethodDef mpMethods[] = {
      "Evauates a multipolar expansion at a given point"},
     {"eval_array",  evaluate_array, METH_VARARGS,
      "Evauates a multipolar expansion for all points of a given array"},
-    {"eval_field_array",  evaluate_array, METH_VARARGS,
+    {"eval_field_array",  evaluate_field_array, METH_VARARGS,
      "Evauates a field from a multipolar expansion for all points of a given array"},
     {"shift",  shift_expansion, METH_VARARGS,
      "Shifts a multipolar expansion to a new point"},

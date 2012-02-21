@@ -38,8 +38,18 @@ class Box(object):
         else:
             self.coords = parent.coords * 2 + rel_coords
 
-        
+        self.rf = None
+    
 
+    def clear(self, recurse=True):
+        self.outward, self.inward = None, None
+
+        if recurse:
+            for child in self.children:
+                child.clear()
+
+    
+        
     def refine(self):
         """ Creates the 8 children of the box. """
         
@@ -84,7 +94,17 @@ class Box(object):
                                   max_charges=max_charges,
                                   evaluation=evaluation)
                 
- 
+
+    def update_charges(self, q):
+        """ Recursively re-set the charges contained in the box.  This
+        keeps the refinement oct-tree. """
+
+        self.q[:] = q
+        for i, child in enumerate(self.children):
+            child.update_charges(q[self.flt[i, :]])
+
+
+        
     def set_evaluation(self, rv):
         """ Recursively sets the points where the potential will be evaluated.
         """
@@ -93,12 +113,28 @@ class Box(object):
         self.phi = zeros((self.rv.shape[1],))
         indices = self._indices(rv)
 
-        self.fltv = empty([8, len(self.q)], dtype=bool)
+        self.fltv = empty([8, len(self.phi)], dtype=bool)
 
         for i, child in enumerate(self.children):
             self.fltv[i, :] = (indices == i)
             child.set_evaluation(rv[:, self.fltv[i, :]])
+
+
+    def set_field_evaluation(self, rf):
+        """ Recursively sets the points where the fields will be evaluated.
+        """
         
+        self.rf = rf
+        self.field = zeros((3, self.rf.shape[1],))
+        indices = self._indices(rf)
+
+        self.fltf = empty([8, self.rf.shape[1]], dtype=bool)
+
+        for i, child in enumerate(self.children):
+            self.fltf[i, :] = (indices == i)
+            #print self.fltf[i, :]
+            if any(self.fltf[i, :]):
+                child.set_field_evaluation(rf[:, self.fltf[i, :]])
         
         
     def _indices(self, r):
@@ -115,15 +151,19 @@ class Box(object):
         return dot(p2, bits)
 
 
-    def collect_solutions(self):
+    def collect_solutions(self, field=False):
         """ Collects the solution for each of the box's children. """
 
         for i, child in enumerate(self.children):
-            child.collect_solutions()
+            child.collect_solutions(field=field)
 
             self.phi[self.fltv[i, :]] = child.phi
-            
-            
+            if field and child.rf is not None:
+                # Note that if child contains field evaluation points,
+                # then self do too.
+                self.field[:, self.fltf[i, :]] = child.field
+
+
     def is_near_neighbour(self, other):
         """ Checks whether other is a near neighbour of this box.
         Note that they must belong to the same oct-tree or the algorithm
@@ -219,7 +259,7 @@ class Box(object):
             rshift = other.center - self.center
             M = mpolar.shift(rshift, INOUT, other.outward)
             
-            #mpolar.accum(self.inward,
+            # mpolar.accum(self.inward,
             #             mpolar.shift(rshift, INOUT, other.outward))
             
             self.inward[:, :] += M
@@ -249,25 +289,34 @@ class Box(object):
             child.downward()
         
 
-    def solve(self, a):
+    def solve(self, a, field=False):
         """ Once we have the local expansion for the box and the list
         of near-neighbours, we can finally evaluate the potential.
         Note that generally this function is called only for leaf nodes. """
 
-        self.phi = mpolar.eval_array(self.inward,
-                                     self.rv - self.center[:, newaxis], INWARD)
+        self.phi[:] = mpolar.eval_array(self.inward,
+                                        self.rv - self.center[:, newaxis],
+                                        INWARD)
 
         for other in self.neighbours:
             self.phi += mpolar.direct(other.r, other.q, self.rv, a)
 
 
-    def solve_all(self, a=0.0):
+        if field and self.rf is not None:
+            self.field[:, :] = mpolar.eval_field_array(
+                self.inward, self.rf - self.center[:, newaxis],
+                INWARD)
+            for other in self.neighbours:
+                self.field += mpolar.field_direct(other.r, other.q, self.rf, a)
+
+
+    def solve_all(self, a=0.0, **kwargs):
         """ Calls solve for the leaf nodes of the sub-tree rooted at self. """
         if not self.children:
-            self.solve(a)
+            self.solve(a, **kwargs)
         else:
             for child in self.children:
-                child.solve_all(a)
+                child.solve_all(a, **kwargs)
 
 
     def plot(self, dims=[0, 1], recurse=False, **kwargs):
@@ -303,6 +352,24 @@ class Box(object):
     def __str__(self):
         #return str(self.coords)
         return "(%s)@%d" % (str(self.coords), self.level)
+
+
+def containing_box(r):
+    """ Builds a Box object that contains all k points in r[3, k].
+    The Box has to be a perfect cube for the FMM to work.  """
+
+    rmin = amin(r, axis=1)
+    rmax = amax(r, axis=1)
+    
+    lengths = rmax - rmin
+    center = 0.5 * (rmax + rmin)
+    sides = amax(lengths) * ones((3,))
+
+    r0 = center - sides / 2
+    r1 = center + sides / 2
+    
+    return Box(r0, r1)
+
 
 
 def main():

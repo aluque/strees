@@ -4,6 +4,7 @@ realization, that would contain things such as charges, positions, etc.
 that evolve even when the structure is fixed.
 """
 from random import random as uniform
+from scipy.sparse import lil_matrix, csr_matrix
 from numpy import *
 
 class Tree(object):
@@ -42,7 +43,7 @@ class Tree(object):
 
         
     def make_root(self):
-        """ Creates a segment node to be root of this tree. """
+        """ Creatres a segment node to be root of this tree. """
         root = Segment()
         root.set_tree(self)
         self.root = root
@@ -50,6 +51,26 @@ class Tree(object):
         return root
 
 
+    def terminals(self):
+        """ Finds all segments contained in the tree that do not
+        have any children. Returns an array with segment indices. """
+        l = []
+        for i, segment in enumerate(self.segments):
+            if not segment.children:
+                l.append(i)
+
+        return array(l)
+
+
+    def extend(self, indices):
+        """ Extends the tree adding one children to each segment indexed
+        by indices, in that order.  This is used to extend a propagating tree.
+        """
+        for i in indices:
+            new_segment = Segment()
+            self.segments[i].add_child(new_segment)
+        
+        
     def zeros(self, dim=None):
         """ Returns an array that can hold all the data needed for a variable
         in this tree's segments.  For multi-dimension data, use dim. """
@@ -59,6 +80,74 @@ class Tree(object):
         else:
             return zeros((self.n, dim))
 
+
+    def lengths(self, endpoints):
+        """ Returns an array with the segment lengths of the tree, given
+        an array with the endpoints. """
+        
+        parents = self.parents()
+        l = sqrt(sum((endpoints - endpoints[parents, :])**2, axis=1))
+        return l
+
+
+    def midpoints(self, endpoints):
+        """ Returns an array with the segment midpoints of the tree, given
+        an array with the endpoints. """
+
+        parents = self.parents()
+        return 0.5 * (r + r[parents, :])
+    
+
+    def ohm_matrix(self, endpoints):
+        """ Builds a matrix M that will give use the evolution of charges
+        in every segment of the tree as dq/dt = M . phi, where phi is
+        the potential at the center of each segment and '.' is the dot product.
+        This function builds the matrix from scratch.  Usually it is much
+        better to keep updating the matrix as the tree grows.
+        """
+        l = self.lengths(endpoints)
+
+        # We build the matrix in LIL format first, later we convert to a
+        # format more efficient for matrix-vector multiplications
+        M = lil_matrix((self.n, self.n))
+
+        for segment in self:
+            i = segment.index
+            m = 0.0
+            for other in segment.iter_adjacent():
+                j = other.index
+                a = 2.0 / (l[i] + l[j])
+                M[i, j] = a
+                m -= a
+
+            M[i, i] = m
+
+        return csr_matrix(M)
+
+
+    def save(self, fname):
+        """ Saves the tree structure into file fname. """
+        parents = self.parents()
+        i = arange(self.n)
+        savetxt(fname, c_[i, parents])
+
+
+    @staticmethod
+    def load(fname):
+        indices, parents = loadtxt(fname, unpack=True)
+        t = Tree()
+        
+        for i in indices:
+            seg = Segment()
+            t.add_segment(seg)
+
+        # We use two loops in case one segment has a parent with a larger
+        # index.  This does not happen in 'normal' trees but maybe the user
+        # wants to play with the tree file and do funny things
+        for i in indices:
+            if parents[i] != 0:
+                t.segments[i].set_parent(t.segments[parents[i]])
+        
 
     def __iter__(self):
         return iter(self.segments)

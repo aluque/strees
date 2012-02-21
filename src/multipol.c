@@ -376,8 +376,8 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
 
   dim[0] = 3;
   dim[1] = k;
-    
-  field = (mp_array*) (mp_array_from_dims (1, dim, mp_DOUBLE));
+  
+  field = (mp_array*) (mp_array_from_dims (2, dim, mp_DOUBLE));
 
   for (i = 0; i < k; i++) {
     double x, y, z, rho, rhoxy;
@@ -460,17 +460,18 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
       rpow = (inout > 0)? (rpow / rho): rpow * rho;
     }
 
+    /* The minus signs appear here b.c. E = -grad(phi) */
     /* X */
     ptr = (double *) mp_array_getptr2 (field, X, i);
-    *ptr = (erho * x / rho + etheta * cosphi * z / rho - ephi * sinphi);
+    *ptr = -(erho * x / rho + etheta * cosphi * z / rho - ephi * sinphi);
 
     /* Y */
     ptr = (double *) mp_array_getptr2 (field, Y, i);
-    *ptr = (erho * y / rho + etheta * sinphi * z / rho + ephi * cosphi);
+    *ptr = -(erho * y / rho + etheta * sinphi * z / rho + ephi * cosphi);
 
     /* Z */
     ptr = (double *) mp_array_getptr2 (field, Z, i);
-    *ptr = (erho * z / rho - etheta * rhoxy / rho);
+    *ptr = -(erho * z / rho - etheta * rhoxy / rho);
 
   }
 
@@ -762,10 +763,10 @@ mp_field_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
       
       /* This is important since often the source and measuring points will be
 	 the same and we do not like infinities around here. */
-      if (a > 0 || rn > 0.0) {
-	*f_ptr_x += dx * q0 / (rn * (rn + a) * (rn + a));
-	*f_ptr_y += dy * q0 / (rn * (rn + a) * (rn + a));
-	*f_ptr_z += dz * q0 / (rn * (rn + a) * (rn + a));
+      if (rn > 0.0) {
+	*f_ptr_x -= dx * q0 / (rn * (rn + a) * (rn + a));
+	*f_ptr_y -= dy * q0 / (rn * (rn + a) * (rn + a));
+	*f_ptr_z -= dz * q0 / (rn * (rn + a) * (rn + a));
       }
     }
   }

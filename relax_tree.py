@@ -5,6 +5,7 @@ from scipy.sparse import lil_matrix, csr_matrix
 from scipy.integrate import odeint, ode
 import pylab
 from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
 
 import tree
 import mpolar
@@ -25,6 +26,8 @@ def main():
     r0 = amin(r, axis=0)
     r1 = amax(r, axis=0)
     
+
+    
     # Let's play with trees
     parents = tr.parents()
     l = sqrt(sum((r - r[parents, :])**2, axis=1))
@@ -32,9 +35,9 @@ def main():
     
     M = tree_matrix(tr, l)
 
-    t = linspace(0, 1e-1, 1000)
+    t = linspace(0, 5e-3, 100)
     q0 = zeros((r.shape[0],))
-    f = build_func(M, rmid.T, r0, r1,
+    f = build_func(tr, M, rmid.T, r0, r1,
                    array([0.0, 0.0, -1.0]),
                    a=0.01, for_ode=True)
     
@@ -51,20 +54,23 @@ def main():
         print d.t
         qt[i, :] = d.y
         
-    animate(tr, rmid, qt)
+    animate(tr, r0, r1, rmid, qt, array([0.0, 0.0, -1.0]))
 
 
-def build_func(M, r, r0, r1, e0, a=0.0, p=4, for_ode=False):
+def build_func(tr, M, r, r0, r1, e0, a=0.0, p=4, for_ode=False):
+    iterm = tr.terminals()
+
     def f(q, t0):
         box = Box(r0, r1)
         box.set_charges(r, q, max_charges=200)
-
+        box.set_field_evaluation(r[:, iterm])
+        
         box.build_lists(recurse=True)
         box.upward(p)
         box.downward()
-        box.solve_all(a=a)
+        box.solve_all(a=a, field=True)
 
-        box.collect_solutions()
+        box.collect_solutions(field=True)
 
         return M.dot(box.phi - dot(r.T, e0))
 
@@ -74,20 +80,37 @@ def build_func(M, r, r0, r1, e0, a=0.0, p=4, for_ode=False):
     return f if not for_ode else f_ode
 
 
-def animate(tr, r, qt):
+def animate(tr, r0, r1, r, qt, e0):
     nt, n = qt.shape
     vmin, vmax = amin(qt), amax(qt)
+    iterm = tr.terminals()
     
+    ax = pylab.gcf().add_subplot(111)
+    #ax = pylab.gcf().add_subplot(111, projection='3d')
+
     for i in xrange(nt):
-        pylab.clf()
-        #plot_tree(tr, r, qt[i, :], vmin=vmin, vmax=vmax)
-        print r[:, 0].shape, r[:, 2].shape, qt[i, :].shape
+        box = Box(r0, r1)
+        box.set_charges(r.T, qt[i, :], max_charges=200)
+        # box.set_evaluation(array([]))
+        box.set_field_evaluation(r.T[:, iterm])
+        box.build_lists(recurse=True)
+        box.upward(4)
+        box.downward()
+        box.solve_all(a=0.01, field=True)
+
+        box.collect_solutions(field=True)
+        field = box.field + e0[:, newaxis]
         
-        pylab.scatter(r[:, 0], r[:, 2], c=qt[i, :],
+        #pylab.clf()
+        #plot_tree(tr, r, qt[i, :], vmin=vmin, vmax=vmax)
+
+        ax.clear()
+        ax.scatter(r[:, 0], r[:, 2], c=qt[i, :],
                       s=5.0, faceted=False,
                       vmin=vmin, vmax=vmax)
-        pylab.xlim([0.0, 1.0])
-        pylab.ylim([0.0, 1.0])
+        ax.quiver(r[iterm, 0], r[iterm, 2], field[0, :], field[2, :])
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([-0.2, 1.0])
         
         pylab.savefig('tree_%.3d.png' % i)
         print 'tree_%.3d.png' % i

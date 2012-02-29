@@ -4,8 +4,11 @@ from itertools import product
 
 from numpy import *
 
-import pylab
-from matplotlib.patches import Rectangle
+try:
+    import pylab
+    from matplotlib.patches import Rectangle
+except ImportError:
+    pass
 
 import mpolar
 

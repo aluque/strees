@@ -66,10 +66,9 @@ def main():
         # print 't = %g\ttree_%.3d.png' % (it, i)
 
         r, q = step(tr, r, q, dt, p=BRANCHING_PROBABILITY)
-        with ContextTimer("saving"):
-            dfile.add_step(it, tr, r, q, latest_phi)
+        #with ContextTimer("saving"):
+        dfile.add_step(it, tr, r, q, latest_phi)
             
-        print branching_angles(tr, r) * 180 / pi
 
     
 def step(tr, r, q0, dt, p=0.0):
@@ -94,7 +93,7 @@ def step(tr, r, q0, dt, p=0.0):
     # 5. Branch some of the tips
     does_branch = rand(*iterm.shape) < (p * dt)
 
-    print "%d active branches" % len(iterm)
+    # print "%d active branches" % len(iterm)
     
     radv = empty((3, sum(does_branch) + len(iterm)))
     j = 0
@@ -134,8 +133,8 @@ def relax(box, tr, r, q0, dt):
     """ Relax the conductor tree for a time dt. """
     global latest_phi
     
-    with ContextTimer("re-computing Ohm matrix"):
-        M = tr.ohm_matrix(r)
+    #with ContextTimer("re-computing Ohm matrix"):
+    M = tr.ohm_matrix(r)
 
     n = len(q0)
     
@@ -174,8 +173,8 @@ def relax(box, tr, r, q0, dt):
     
     d.set_initial_value(q0, 0.0)
 
-    with ContextTimer("relaxing (n=%d)" % len(q0)):
-        d.integrate(dt)
+    #with ContextTimer("relaxing (n=%d)" % len(q0)):
+    d.integrate(dt)
 
     return d.y
 

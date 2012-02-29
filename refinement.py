@@ -220,14 +220,12 @@ class Box(object):
     def collect(self):
         """ Collects the multipolar expansions of this box's children,
         translate them to the center and sums them.  """
+
         for i, t in enumerate(ndindex(2, 2, 2)):
             rshift = (t - array([0.5, 0.5, 0.5])) * self.lengths / 2
             M_child = mpolar.shift(rshift, OUTWARD, self.children[i].outward)
             
-            if self.outward is None:
-                self.outward = M_child
-            else:
-                self.outward += M_child
+            self.outward += M_child
 
 
     def upward(self, p):
@@ -237,9 +235,10 @@ class Box(object):
         This is called "Upward Pass" in the Greengard papers.
         """
         
-        # Here we build an inward expansion for each box that is initially
-        # set to zero
+        # Here we build an outward and an inward expansion for each box
+        # that are initially set to zero
         self.inward = zeros((p, p), dtype='complex128')
+        self.outward = zeros((p, p), dtype='complex128')
         
         if not self.children:
             self.expand(p)

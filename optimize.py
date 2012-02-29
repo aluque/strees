@@ -4,27 +4,42 @@
 import timeit
 
 from numpy import *
+import h5py
+
 import mpolar
 from refinement import Box
 import tree
+from plotter import bounding_box
+
 
 def run_instance(k, max_charges, p, number=1):
     """ Runs an instance of the FMM with k charges, max_charges in each box
     and multipolar order p.  Returns the time required for the run. """
 
+    # For an actual electrostatic tree
+    # This is ugly.  I hate myself:
+    fname, step = k
+
+    fp = h5py.File(fname, "r")
+    g = fp['main']
+    r = array(g[step]['r']).T
+    q = array(g[step]['q'])
+
+    r0, r1 = bounding_box(r)
+
     # For charges in a tree:
     #
-    tr = tree.random_branching_tree(k, 0.05)
-    r = tree.sample_endpoints(tr)
+    # tr = tree.random_branching_tree(k, 0.05)
+    # r = tree.sample_endpoints(tr)
     
-    r0 = amin(r, axis=0)
-    r1 = amax(r, axis=0)
+    # r0 = amin(r, axis=0)
+    # r1 = amax(r, axis=0)
     
-    r = ((r - r0) / (r1 - r0)).T
-    r0 = amin(r, axis=1)
-    r1 = amax(r, axis=1)
+    # r = ((r - r0) / (r1 - r0)).T
+    # r0 = amin(r, axis=1)
+    # r1 = amax(r, axis=1)
     
-    q = ones((r.shape[1],))
+    # q = ones((r.shape[1],))
     
     # For uniformly distributed charges:
     #
@@ -48,19 +63,27 @@ def run_instance(k, max_charges, p, number=1):
     return timeit.timeit(stmt=mp_func, number=number)
 
 def direct_time(k, number=1):
-    r = random.uniform(-1, 1, size=(3, k))
-    q = random.uniform(-1.0, 1.0, size=k)
+    fname, step = k
+
+    fp = h5py.File(fname, "r")
+    g = fp['main']
+    r = array(g[step]['r']).T
+    q = array(g[step]['q'])
+
+    #r = random.uniform(-1, 1, size=(3, k))
+    #q = random.uniform(-1.0, 1.0, size=k)
 
     def direct_func():
         """ Direct method """
-        return mpolar.direct(r, q, r)
+        return mpolar.direct(r, q, r, 0.0)
 
     return timeit.timeit(stmt=direct_func, number=number)
 
 
 
 def main():
-    k = 10000
+    #k = 10000
+    k = ('/Users/luque/data/trees/fmm.h5', '00300')
     p = 4
     
     max_charges = exp(linspace(log(10), log(10000), 50)).astype('i')
@@ -73,9 +96,9 @@ def main():
         deltas[i] = delta
 
     direct = zeros(deltas.shape) + direct_time(k)
-    
-    savetxt('opt_k%d_p%d_tree.txt' % (k, p), c_[max_charges, deltas, direct])
+    # savetxt('opt_k%d_p%d_tree.txt' % (k, p), c_[max_charges, deltas, direct])
 
+    savetxt('opt_p%d_es.txt' % (p,), c_[max_charges, deltas, direct])
 
 if __name__ == '__main__':
     main()

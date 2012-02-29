@@ -1,25 +1,50 @@
 import sys
+import time
 
 from numpy import *
+from numpy.random import rand, randn
+from numpy.linalg import norm
 from scipy.integrate import odeint, ode
-import pylab
 
+from readinput import load_input
 import tree
 from refinement import Box, containing_box
 import mpolar
+from datafile import DataFile
+import os.path
+from angles import branching_angles
+import parameters as param_descriptors
 
 from contexttimer import ContextTimer
 
-MAX_CHARGES_PER_BOX = 200
-MULTIPOLAR_TERMS = 4
-CONDUCTOR_THICKNESS = 0.01
-EXTERNAL_FIELD = array([0.0, 0.0, -5.0])
-TIP_MOBILITY = 1.0
-END_TIME = 1.0
-TIME_STEP = 1e-4
+# MAX_CHARGES_PER_BOX = 200
+# MULTIPOLAR_TERMS = 5
+# CONDUCTOR_THICKNESS = 0.001
+# EXTERNAL_FIELD = array([0.0, 0.0, -5.0])
+# TIP_MOBILITY = 1.0
+# END_TIME = 1.0
+# TIME_STEP = 1e-4
+# BRANCHING_PROBABILITY = 100.
+# BRANCHING_SIGMA = 1e-4
+# RUN_NAME = sys.argv[1]
+# OUT_FILE = os.path.expanduser('~/data/trees/%s.h5' % sys.argv[1])
 
+# # Use the FMM solver only when we have more than this number of charges
+# FMM_THRESHOLD = 4000
+
+latest_phi = None
+EXTERNAL_FIELD_VECTOR = None
 
 def main():
+    # Load input parameters from the input file and add the, in allcaps
+    # to the global namespace.
+    global EXTERNAL_FIELD_VECTOR
+    parameters = load_input(sys.argv[1], param_descriptors)
+    globals().update(dict((key.upper(), item)
+                          for key, item in parameters.iteritems()))
+
+    EXTERNAL_FIELD_VECTOR = array([0.0, 0.0, EXTERNAL_FIELD])
+    
     tr = tree.random_branching_tree(50, 0.05)
     r0 = tree.sample_endpoints(tr) / 1000.0
 
@@ -31,16 +56,23 @@ def main():
     
     r, q = r0, q0
 
+
+    dfile = DataFile(OUT_FILE, parameters=parameters)
+    
     for i, it in enumerate(t):
-        with ContextTimer("plotting"):
-            plot_projections(r, q)
-            pylab.savefig('tree_%.3d.png' % i)
-        print 't = %g\ttree_%.3d.png' % (it, i)
-        
-        r, q = step(tr, r, q, dt)
+        # with ContextTimer("plotting"):
+        #     plot_projections(r, q)
+        #     pylab.savefig('tree_%.3d.png' % i)
+        # print 't = %g\ttree_%.3d.png' % (it, i)
+
+        r, q = step(tr, r, q, dt, p=BRANCHING_PROBABILITY)
+        with ContextTimer("saving"):
+            dfile.add_step(it, tr, r, q, latest_phi)
+            
+        print branching_angles(tr, r) * 180 / pi
+
     
-    
-def step(tr, r, q0, dt):
+def step(tr, r, q0, dt, p=0.0):
     iterm = tr.terminals()
     box = containing_box(r.T)
     box.set_charges(r.T, q0, max_charges=MAX_CHARGES_PER_BOX)
@@ -59,12 +91,27 @@ def step(tr, r, q0, dt):
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
     
-    radv = r.T[:, iterm] + dt * v
+    # 5. Branch some of the tips
+    does_branch = rand(*iterm.shape) < (p * dt)
+
+    print "%d active branches" % len(iterm)
+    
+    radv = empty((3, sum(does_branch) + len(iterm)))
+    j = 0
+    for i, branches in enumerate(does_branch):
+        if not branches:
+            radv[:, j] = r.T[:, iterm[i]] + dt * v[:, i]
+            j += 1
+        else:
+            dr1, dr2 = symmetric_gaussian(dt * v[:, i], BRANCHING_SIGMA)
+            radv[:, j] = r.T[:, iterm[i]] + dr1
+            radv[:, j + 1] = r.T[:, iterm[i]] + dr2
+            j += 2
     
     rnew = concatenate((r, radv.T), axis=0)
-    qnew = concatenate((q1, zeros((len(iterm), ))), axis=0)
+    qnew = concatenate((q1, zeros((sum(does_branch) + len(iterm), ))), axis=0)
     
-    tr.extend(iterm)
+    tr.extend(sort(r_[iterm, iterm[does_branch]]))
 
     return rnew, qnew
 
@@ -79,47 +126,48 @@ def velocities(box, r, q):
     box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
     
     box.collect_solutions(field=True)
-
-    return TIP_MOBILITY * (box.field + EXTERNAL_FIELD[:, newaxis])
+    
+    return TIP_MOBILITY * (box.field + EXTERNAL_FIELD_VECTOR[:, newaxis])
 
     
 def relax(box, tr, r, q0, dt):
     """ Relax the conductor tree for a time dt. """
-
+    global latest_phi
+    
     with ContextTimer("re-computing Ohm matrix"):
         M = tr.ohm_matrix(r)
 
+    n = len(q0)
+    
     def f(t0, q):
-        with ContextTimer("FMM"): 
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # Don't forget to remove these lines:
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # box = containing_box(r.T)
-            # box.set_charges(r.T, q, max_charges=MAX_CHARGES_PER_BOX)
-            # box.build_lists(recurse=True)
+        global latest_phi
 
-            box.clear(recurse=True)
+        if n >= FMM_THRESHOLD:
+            # with ContextTimer("FMM") as ct_fmm: 
             box.update_charges(q)
-            
+
             box.upward(MULTIPOLAR_TERMS)
             box.downward()
             box.solve_all(a=CONDUCTOR_THICKNESS, field=False)
 
             box.collect_solutions(field=False)
 
-        # phi = box.phi
-        with ContextTimer("direct"):
+            phi = box.phi
+        else:
+            # with ContextTimer("direct") as ct_direct:
             phi = mpolar.direct(r.T, q, r.T, CONDUCTOR_THICKNESS)
 
-        err = sum((phi - box.phi)**2) / len(phi)
-
-        print "FMM error = %g" % err
-        if err > 1e-4:
-            print "max(q) = ", max(q)
-            savetxt("poisson.txt", c_[r, q, box.phi, phi])
-            sys.exit(-1)
+        # err = sqrt(sum((phi - box.phi)**2)) / len(phi)
         
-        return M.dot(phi - dot(r, EXTERNAL_FIELD))
+        # ftimes.write("%d\t%g\t%g\t%g\n" % (len(q),
+        #                                   ct_fmm.duration, ct_direct.duration,
+        #                                   err))
+        # ftimes.flush()
+        
+        # print "FMM error = %g" % err
+        latest_phi = phi
+        
+        return M.dot(phi - dot(r, EXTERNAL_FIELD_VECTOR))
 
 
     d = ode(f).set_integrator('dopri853',  nsteps=2000)
@@ -130,6 +178,31 @@ def relax(box, tr, r, q0, dt):
         d.integrate(dt)
 
     return d.y
+
+
+def symmetric_gaussian(dr, sigma):
+    """ Samples a branch from a symmetric, gaussian branching model.
+    In a plane perpendicular to dr we sample dr1 from a cylindrically
+    symmetric gaussian distribution; the two branching points are dr1 and
+    its symmetric vector wrt dr. """
+
+    u = dr / norm(dr)
+    # We find two unit vectors orthonormal to u (also dr); note that this
+    # fails if u is parallel to x !!!
+    
+    ex = array([1.0, 0, 0])
+
+    e1 = ex - dot(u, ex) * u
+    e1 = e1 / norm(e1)
+    
+    e2 = cross(u, e1)
+
+    p, q = sigma * randn(2)
+
+    dr1 = dr + (p * e1 + q * e2)
+    dr2 = dr - (p * e1 + q * e2)
+
+    return dr1, dr2
 
 
 def plot_projections(r, q):

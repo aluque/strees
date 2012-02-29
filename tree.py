@@ -41,7 +41,7 @@ class Tree(object):
 
         return p
 
-        
+
     def make_root(self):
         """ Creatres a segment node to be root of this tree. """
         root = Segment()
@@ -62,6 +62,16 @@ class Tree(object):
         return array(l)
 
 
+    def branches(self):
+        """ Finds all indices of segments that branch in the tree"""
+        l = []
+        for i, segment in enumerate(self.segments):
+            if len(segment.children) > 1:
+                l.append(i)
+
+        return array(l)
+
+
     def extend(self, indices):
         """ Extends the tree adding one children to each segment indexed
         by indices, in that order.  This is used to extend a propagating tree.
@@ -69,7 +79,7 @@ class Tree(object):
         for i in indices:
             new_segment = Segment()
             self.segments[i].add_child(new_segment)
-        
+            
         
     def zeros(self, dim=None):
         """ Returns an array that can hold all the data needed for a variable
@@ -86,6 +96,7 @@ class Tree(object):
         an array with the endpoints. """
         
         parents = self.parents()
+        
         l = sqrt(sum((endpoints - endpoints[parents, :])**2, axis=1))
         return l
 
@@ -133,22 +144,29 @@ class Tree(object):
 
 
     @staticmethod
-    def load(fname):
+    def loadtxt(fname):
         indices, parents = loadtxt(fname, unpack=True)
+
+        return Tree.from_parents(parents)
+
+
+    @staticmethod
+    def from_parents(parents):
+        """ Builds a tree from a list of the parent indices. """
         t = Tree()
-        
-        for i in indices:
-            seg = Segment()
-            t.add_segment(seg)
 
-        # We use two loops in case one segment has a parent with a larger
-        # index.  This does not happen in 'normal' trees but maybe the user
-        # wants to play with the tree file and do funny things
-        for i in indices:
-            if parents[i] != 0:
-                t.segments[i].set_parent(t.segments[parents[i]])
-        
+        indices = arange(parents.shape[0])
 
+        for i in indices:
+            if i == 0:
+                t.make_root()
+            else:
+                seg = Segment()
+                t.segments[parents[i]].add_child(seg)
+
+        return t
+
+    
     def __iter__(self):
         return iter(self.segments)
 

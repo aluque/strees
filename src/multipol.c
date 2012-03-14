@@ -707,8 +707,22 @@ mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
       rn = sqrt(dx * dx + dy * dy + dz * dz);
       /* This is important since often the source and measuring points will be
 	 the same and we do not like infinities around here. */
-      if (a > 0 || rn > 0.0) {
-	*phi_ptr += q0 / (rn + a);
+      /* if (a > 0 || rn > 0.0) { */
+      /* 	*phi_ptr += q0 / (rn + a); */
+      /* 	printf ("epsilon = %g\tphi0 = %g\tphi1 = %g\n", a / rn,  */
+      /* 		q0 / (rn + a), q0 / rn); */
+      /* } */
+
+      /* Here we build an approximation to the thin-wire potential.
+	 The potential we would like goes like 1 / (r + a) but this is
+	 incompatible with the FMM method.  Instead, we look for a potential
+	 that is identical to q / r outside a given ball around q.  We also
+	 impose that the potential goes to 1 / a as r -> 0 and that it is
+	 continuous and monotonic. */
+      if (rn > 2 * a) {
+      	*phi_ptr += q0 / rn;
+      } else {
+      	if (a > 0) *phi_ptr += q0 / (a + 0.5 * rn);
       }
     }
   }

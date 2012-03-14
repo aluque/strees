@@ -2,7 +2,7 @@ import sys
 import time
 
 from numpy import *
-from numpy.random import rand, randn
+from numpy.random import rand, randn, seed
 from numpy.linalg import norm
 from scipy.integrate import odeint, ode
 
@@ -42,12 +42,13 @@ def main():
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
-
+    seed(RANDOM_SEED)
+    
     EXTERNAL_FIELD_VECTOR = array([0.0, 0.0, EXTERNAL_FIELD])
     
-    tr = tree.random_branching_tree(50, 0.05)
+    tr = tree.random_branching_tree(4, 0.00)
     r0 = tree.sample_endpoints(tr) / 1000.0
-
+    
     k = r0.shape[0]
     q0 = zeros((k, ))
 
@@ -67,14 +68,16 @@ def main():
 
         r, q = step(tr, r, q, dt, p=BRANCHING_PROBABILITY)
         #with ContextTimer("saving"):
-        dfile.add_step(it, tr, r, q, latest_phi)
+        dfile.add_step(it, tr, r, q, latest_phi,
+                       error=error, error_dq=error_dq)
             
 
     
 def step(tr, r, q0, dt, p=0.0):
     iterm = tr.terminals()
     box = containing_box(r.T)
-    box.set_charges(r.T, q0, max_charges=MAX_CHARGES_PER_BOX)
+    box.set_charges(r.T, q0, max_charges=MAX_CHARGES_PER_BOX,
+                    min_length=2 * CONDUCTOR_THICKNESS)
     box.build_lists(recurse=True)
     box.set_field_evaluation(r.T[:, iterm])
 
@@ -131,7 +134,7 @@ def velocities(box, r, q):
     
 def relax(box, tr, r, q0, dt):
     """ Relax the conductor tree for a time dt. """
-    global latest_phi
+    global latest_phi, error, error_dq
     
     #with ContextTimer("re-computing Ohm matrix"):
     M = tr.ohm_matrix(r)
@@ -140,7 +143,7 @@ def relax(box, tr, r, q0, dt):
     
     def f(t0, q):
         global latest_phi
-
+        phi0 = mpolar.direct(r.T, q, r.T, CONDUCTOR_THICKNESS)
         if n >= FMM_THRESHOLD:
             # with ContextTimer("FMM") as ct_fmm: 
             box.update_charges(q)
@@ -154,7 +157,10 @@ def relax(box, tr, r, q0, dt):
             phi = box.phi
         else:
             # with ContextTimer("direct") as ct_direct:
-            phi = mpolar.direct(r.T, q, r.T, CONDUCTOR_THICKNESS)
+            phi = phi0
+            
+        # print "q = ", q
+        # print "phi = ", phi
 
         # err = sqrt(sum((phi - box.phi)**2)) / len(phi)
         
@@ -165,9 +171,10 @@ def relax(box, tr, r, q0, dt):
         
         # print "FMM error = %g" % err
         latest_phi = phi
+        error = phi - latest_phi
+        error_dq = M.dot(error)
         
         return M.dot(phi - dot(r, EXTERNAL_FIELD_VECTOR))
-
 
     d = ode(f).set_integrator('dopri853',  nsteps=2000)
     

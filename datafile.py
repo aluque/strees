@@ -23,7 +23,7 @@ class DataFile(object):
         self.step = 0
 
 
-    def add_step(self, t, tree, r, q, phi):
+    def add_step(self, t, tree, r, q, phi, **kwargs):
         """ Adds a step to the file. """
 
         g = self.main.create_group('%.5d' % self.step)
@@ -38,7 +38,10 @@ class DataFile(object):
 
         parents = tree.parents()
         g.create_dataset('parents', data=parents, compression='gzip')
-        
+
+        for key, item in kwargs.iteritems():
+            g.create_dataset(key, data=item, compression='gzip')
+            
         self.fp.flush()
 
 

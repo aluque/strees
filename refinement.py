@@ -64,7 +64,8 @@ class Box(object):
                                      rel_coords=array(t)))
 
 
-    def set_charges(self, r, q, max_charges=None, evaluation=True):
+    def set_charges(self, r, q, max_charges=None, min_length=0,
+                    evaluation=True):
         """ Sets the charges of this box.
         If max_charges is not None, refines the box into smaller children
         until each leaf box contains no more than max_charges.
@@ -80,7 +81,8 @@ class Box(object):
             self.rv = self.r
             self.phi = zeros((self.r.shape[1],))
             
-        if max_charges is not None and self.n > max_charges:
+        if (max_charges is not None and self.n > max_charges
+            and 2 * min_length < self.lengths[0]):
             indices = self._indices(r)
             
             if not self.children:
@@ -259,6 +261,7 @@ class Box(object):
 
         for other in self.interaction_list:
             rshift = other.center - self.center
+
             M = mpolar.shift(rshift, INOUT, other.outward)
             
             # mpolar.accum(self.inward,
@@ -295,7 +298,7 @@ class Box(object):
         """ Once we have the local expansion for the box and the list
         of near-neighbours, we can finally evaluate the potential.
         Note that generally this function is called only for leaf nodes. """
-
+        
         self.phi[:] = mpolar.eval_array(self.inward,
                                         self.rv - self.center[:, newaxis],
                                         INWARD)

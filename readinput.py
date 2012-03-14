@@ -69,7 +69,9 @@ def load_input(fname, parameters, d=None, upper=False, raw=False):
     defaults = dict(home=os.environ['HOME'],
                     user=os.environ['LOGNAME'],
                     cwd=os.getcwd(),
+                    random_seed=None,
                     input=os.path.splitext(os.path.basename(fname))[0],
+                    input_dir=os.path.split(os.path.realpath(fname))[0],
                     hostname=socket.gethostname())
                     
     config.read(fname)

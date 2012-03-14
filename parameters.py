@@ -20,6 +20,12 @@ def desc(s):
 
 
 @positive
+def random_seed(s):
+    """ Seed for the random generator. """
+    return int(s)
+    
+    
+@positive
 def max_charges_per_box(s):
     """ Maximum number of charges per box in the FMM refinement scheme. """
     return int(s)

@@ -50,7 +50,7 @@
 
 
 extern double prefact[MP_MAXL][MP_MAXL];
-extern double trans[MP_MAXL][MP_MAXL];
+extern double trans[MP_MAXL][2 * MP_MAXL - 1];
 
 /* multipol.c */
 void mp_init (void);

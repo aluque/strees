@@ -24,8 +24,10 @@ class ContextTimer(object):
 
 
     def __enter__(self):
-        self.outf.write("[%s ..." % self.name)
-        self.outf.flush()
+        if self.outf is not None:
+            self.outf.write("[%s ..." % self.name)
+            self.outf.flush()
+
         self.t0 = time.time()
 
         return self

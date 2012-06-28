@@ -31,16 +31,18 @@ def main():
     q = array(g[step]['q'])
     phi0 = array(g[step]['phi'])
 
+
     CONDUCTOR_THICKNESS = fp['main'].attrs['conductor_thickness']
     MAX_CHARGES_PER_BOX = fp['main'].attrs['max_charges_per_box']
     MULTIPOLAR_TERMS = fp['main'].attrs['multipolar_terms']
-
+    HAS_PLANAR_ELECTRODE = fp['main'].attrs['has_plane_electrode']
     print "%d charges" % len(q)
     
+    # k = 300
     # r = random.uniform(-1, 1, size=(3, k))
     # q = random.uniform(-1.0, 1.0, size=k)
 
-    box = containing_box(r)
+    box = containing_box(r, reflect=HAS_PLANAR_ELECTRODE)
     box.set_charges(r, q,
                     max_charges=MAX_CHARGES_PER_BOX,
                     min_length=2 * CONDUCTOR_THICKNESS)
@@ -53,7 +55,15 @@ def main():
     
     box.collect_solutions(field=True)
 
-    phi = mpolar.direct(r, q, r, CONDUCTOR_THICKNESS)
+    if HAS_PLANAR_ELECTRODE:
+        # Multiplying by u inverts the third coordinate (Z).
+        u = array([1, 1, -1])[:, newaxis]
+        rx = concatenate((r, r * u), axis=1)
+        qx = r_[q, -q]
+    else:
+        rx, qx = r, q
+        
+    phi = mpolar.direct(rx, qx, r, CONDUCTOR_THICKNESS)[0:len(q)]
     err = sum((phi - box.phi)**2) / len(phi)
     print "FMM error = %g" % err
     print "max(q) = ", max(q)

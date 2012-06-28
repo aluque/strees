@@ -56,6 +56,15 @@ def nonnegative(func):
 
     return f
 
+# A decorator to set a default value, stored in the dictionary PARAM_DEFAULTS
+PARAM_DEFAULTS = {}
+def default(value):
+    def deco(func):
+        global PARAM_DEFAULTS
+        PARAM_DEFAULTS[func.func_name] = value
+        return func
+
+    return deco
 
 
 def load_input(fname, parameters, d=None, upper=False, raw=False):
@@ -69,15 +78,15 @@ def load_input(fname, parameters, d=None, upper=False, raw=False):
     defaults = dict(home=os.environ['HOME'],
                     user=os.environ['LOGNAME'],
                     cwd=os.getcwd(),
-                    random_seed=None,
                     input=os.path.splitext(os.path.basename(fname))[0],
                     input_dir=os.path.split(os.path.realpath(fname))[0],
                     hostname=socket.gethostname())
                     
     config.read(fname)
-
+    
     for section in ['global', 'parameters']:
         for name, value in config.items(section, vars=defaults, raw=raw):
+            print name, repr(value)
             try:
                 func = getattr(parameters, name)
                 value = expand(value, func)
@@ -92,7 +101,9 @@ def load_input(fname, parameters, d=None, upper=False, raw=False):
 
             d[name] = value
 
-    return d
+    r = PARAM_DEFAULTS.copy()
+    r.update(d)
+    return r
 
 
 RE_LIST = re.compile(r'@\((.+)\)')

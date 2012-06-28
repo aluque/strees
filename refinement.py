@@ -17,14 +17,20 @@ INWARD, INOUT, OUTWARD = -1, 0, 1
 class Box(object):
     """ Class of 3d boxes.  Each box can be linked to a set of charges."""
 
-    def __init__(self, r0, r1, parent=None, rel_coords=None):
+    def __init__(self, r0, r1, parent=None, rel_coords=None, reflect=False):
         """ Initializes a box.  r0 contains the smaller (x, y, z) coordinates
-        and r1 the largest (x, y, z).  """
+        and r1 the largest (x, y, z).
+        If reflect is true, we add image charges located at (x, y, -z) for
+        each (x, y, z) and with charge -q.  This is used to implement an
+        electrode at z=0.
+
+        """
         
         self.r0 = r0
         self.r1 = r1
         self.center = 0.5 * (r0 + r1)
         self.lengths = (r1 - r0)
+        self.reflect = reflect
         
         self.children = []
         self.parent = parent
@@ -81,21 +87,34 @@ class Box(object):
             self.rv = self.r
             self.phi = zeros((self.r.shape[1],))
             
+        # We do the reflection that implements the image charge method after
+        # setting the evaluation points because we are not usually interested
+        # in evaluating "image fields".
+        if self.reflect:
+            # Multiplying by u inverts the third coordinate (Z).
+            u = array([1, 1, -1])[:, newaxis]
+            self.r = concatenate((self.r, self.r * u), axis=1)
+            self.q = r_[self.q, -self.q]
+            self.n = 2 * self.n
+
         if (max_charges is not None and self.n > max_charges
             and 2 * min_length < self.lengths[0]):
-            indices = self._indices(r)
+            indices = self._indices(self.r)
             
             if not self.children:
                 self.refine()
 
             self.flt = empty([8, len(self.q)], dtype=bool)
             if evaluation:
-                self.fltv = self.flt
-
+                # Note that when reflect=True self.q and q are not the same
+                # (the former includes the reflections).  To evaluate only
+                # at self.rv we create a view of the first half of flt.
+                self.fltv = self.flt[:, :len(q)].view()
+                
             for i, child in enumerate(self.children):
                 self.flt[i, :] = (indices == i)
-                child.set_charges(r[:, self.flt[i, :]],
-                                  q[self.flt[i, :]],
+                child.set_charges(self.r[:, self.flt[i, :]],
+                                  self.q[self.flt[i, :]],
                                   max_charges=max_charges,
                                   evaluation=evaluation)
                 
@@ -104,6 +123,9 @@ class Box(object):
         """ Recursively re-set the charges contained in the box.  This
         keeps the refinement oct-tree. """
 
+        if self.reflect:
+            q = r_[q, -q]
+        
         self.q[:] = q
         for i, child in enumerate(self.children):
             child.update_charges(q[self.flt[i, :]])
@@ -161,8 +183,9 @@ class Box(object):
 
         for i, child in enumerate(self.children):
             child.collect_solutions(field=field)
-
+            
             self.phi[self.fltv[i, :]] = child.phi
+            
             if field and child.rf is not None:
                 # Note that if child contains field evaluation points,
                 # then self do too.
@@ -220,6 +243,7 @@ class Box(object):
         around its center. """
         self.outward = mpolar.expand(p, self.r - self.center[:, newaxis],
                                     self.q, OUTWARD)
+        
 
 
     def collect(self):
@@ -359,10 +383,18 @@ class Box(object):
         return "(%s)@%d" % (str(self.coords), self.level)
 
 
-def containing_box(r):
+def containing_box(r, reflect=False):
     """ Builds a Box object that contains all k points in r[3, k].
-    The Box has to be a perfect cube for the FMM to work.  """
+    The Box has to be a perfect cube for the FMM to work.
+    If reflect is True, inludes also the reflection of all points
+    over the z=0 plane.
+    """
 
+    if reflect:
+        # Multiplying by u inverts the third coordinate (Z).
+        u = array([1, 1, -1])[:, newaxis]
+        r = concatenate((r, r * u), axis=1)
+        
     rmin = amin(r, axis=1)
     rmax = amax(r, axis=1)
     
@@ -373,7 +405,7 @@ def containing_box(r):
     r0 = center - sides / 2
     r1 = center + sides / 2
     
-    return Box(r0, r1)
+    return Box(r0, r1, reflect=reflect)
 
 
 

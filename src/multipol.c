@@ -9,7 +9,7 @@
 #include "misc.h"
 
 double prefact[MP_MAXL][MP_MAXL];
-double trans[MP_MAXL][MP_MAXL];
+double trans[MP_MAXL][2 * MP_MAXL - 1];
 
 /*  These arrays are allocated in mp_init and used in many calculations.
     It is not a big waste of memory to have them allocated always to contain
@@ -50,6 +50,7 @@ mp_calc_prefacts ()
 						/ (double) (l + m));
     }
   }
+
 }
 
 
@@ -69,7 +70,6 @@ void
 mp_calc_trans ()
 {
   int l, p;
-
 
   for (l = 0; l < MP_MAXL; l++) {
     /* First, the p = 0 terms */

@@ -42,59 +42,88 @@ def main():
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
-    seed(RANDOM_SEED)
+    if RANDOM_SEED >= 0:
+        seed(RANDOM_SEED)
     
     EXTERNAL_FIELD_VECTOR = array([0.0, 0.0, EXTERNAL_FIELD])
     
-    tr = tree.random_branching_tree(4, 0.00)
-    r0 = tree.sample_endpoints(tr) / 1000.0
+    # init a tree from scratch
+    tr, r0, q0 = init_from_scratch()
     
-    k = r0.shape[0]
-    q0 = zeros((k, ))
-
     dt = TIME_STEP
     t = r_[0:END_TIME:dt]
     
     r, q = r0, q0
 
-
     dfile = DataFile(OUT_FILE, parameters=parameters)
+    branched = False
     
     for i, it in enumerate(t):
         # with ContextTimer("plotting"):
         #     plot_projections(r, q)
         #     pylab.savefig('tree_%.3d.png' % i)
         # print 't = %g\ttree_%.3d.png' % (it, i)
+        print "%d/%d  t = %g" % (i, len(t), it)
+        branch_prob = BRANCHING_PROBABILITY
 
-        r, q = step(tr, r, q, dt, p=BRANCHING_PROBABILITY)
-        #with ContextTimer("saving"):
-        dfile.add_step(it, tr, r, q, latest_phi,
-                       error=error, error_dq=error_dq)
+        if SINGLE_BRANCHING_TIME > 0:
+            if it > SINGLE_BRANCHING_TIME:
+                if not branched:
+                    branch_prob = inf
+                    branched = True
+
+        r, q = step(tr, r, q, it, dt, p=branch_prob)
+
+        with ContextTimer("saving %d" % i):
+            dfile.add_step(it, tr, r, q, latest_phi,
+                           error=error, error_dq=error_dq)
             
 
+def init_from_scratch():
+    """ Init a 'tree' with a single charge point. """
     
-def step(tr, r, q0, dt, p=0.0):
+
+    tr = tree.Tree()
+    root = tr.make_root()
+    r0 = tr.zeros(dim=3)
+
+    # tr = tree.random_branching_tree(4, 0.00)
+    # r0 = tree.sample_endpoints(tr) / 1000.0
+
+    k = r0.shape[0]
+    q0 = zeros((k, ))
+
+    return tr, r0, q0
+
+    
+def step(tr, r, q0, t, dt, p=0.0):
     iterm = tr.terminals()
-    box = containing_box(r.T)
-    box.set_charges(r.T, q0, max_charges=MAX_CHARGES_PER_BOX,
-                    min_length=2 * CONDUCTOR_THICKNESS)
+    box = containing_box(r.T, reflect=HAS_PLANE_ELECTRODE)
+    box.set_charges(r.T, q0,
+                    max_charges=MAX_CHARGES_PER_BOX,
+                    min_length=16 * CONDUCTOR_THICKNESS)
     box.build_lists(recurse=True)
     box.set_field_evaluation(r.T[:, iterm])
 
     # 1. Calculate the velocities at t
-    v0 = velocities(box, r, q0)
+    v0 = velocities(box, tr, r, q0)
 
     # 2. Relax the tree from t to t + dt
-    q1 = relax(box, tr, r, q0, dt)
+    q1 = relax(box, tr, r, q0, t, dt)
 
     # 3. Calculate the velocities again at t + dt
-    v1 = velocities(box, r, q1)
+    v1 = velocities(box, tr, r, q1)
 
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
-    
+
     # 5. Branch some of the tips
-    does_branch = rand(*iterm.shape) < (p * dt)
+    vabs = sqrt(sum(v**2, axis=0))
+    does_branch = rand(*iterm.shape) < (p * vabs * dt)
+
+    ## if t >= 1.30e-7:
+    ##     print "<relaxing only>"
+    ##     return r, q1
 
     # print "%d active branches" % len(iterm)
     
@@ -112,38 +141,61 @@ def step(tr, r, q0, dt, p=0.0):
     
     rnew = concatenate((r, radv.T), axis=0)
     qnew = concatenate((q1, zeros((sum(does_branch) + len(iterm), ))), axis=0)
-    
-    tr.extend(sort(r_[iterm, iterm[does_branch]]))
 
+    tr.extend(sort(r_[iterm, iterm[does_branch]]))
     return rnew, qnew
 
 
-def velocities(box, r, q):
+def velocities(box, tr, r, q):
     """ Calculates the electric fields at the tips of the tree and from
     them obtains the propagation velocities of the "streamers" """
 
+    # When we have a single charge the velocity is simply given by the
+    # external electri field
+    if len(q) == 1:
+        return TIP_MOBILITY * EXTERNAL_FIELD_VECTOR[:, newaxis]
+    
     box.update_charges(q)
     box.upward(MULTIPOLAR_TERMS)
     box.downward()
     box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
     
     box.collect_solutions(field=True)
-    
-    return TIP_MOBILITY * (box.field + EXTERNAL_FIELD_VECTOR[:, newaxis])
+    sfields = self_fields(tr, r, q).T
 
+    v = TIP_MOBILITY * (MAXWELL_FACTOR * box.field
+                        + MAXWELL_FACTOR * sfields
+                        + EXTERNAL_FIELD_VECTOR[:, newaxis])
+    return v
+
+def self_fields(tr, r, q):
+    """ Calculates the fields created by the charges at the streamer tips
+    on themselves. """
     
-def relax(box, tr, r, q0, dt):
+    iterm = tr.terminals()
+    parents = tr.parents()[iterm]
+    
+    dr = r[iterm, :] - r[parents, :]
+    u = dr / (sqrt(sum(dr**2, axis=1)))[:, newaxis]
+    
+    return q[iterm][:, newaxis] * u / CONDUCTOR_THICKNESS**2
+
+
+def relax(box, tr, r, q0, t, dt):
     """ Relax the conductor tree for a time dt. """
     global latest_phi, error, error_dq
     
     #with ContextTimer("re-computing Ohm matrix"):
-    M = tr.ohm_matrix(r)
-
+    # If we have an electrode, we fix q[0] by setting the first row of
+    # M to zero.  
+    fix = [] if not HAS_PLANE_ELECTRODE else [0]
+    
+    M = 2 * CONDUCTANCE * tr.ohm_matrix(r, fix=fix)
     n = len(q0)
     
     def f(t0, q):
-        global latest_phi
-        phi0 = mpolar.direct(r.T, q, r.T, CONDUCTOR_THICKNESS)
+        global latest_phi, error, error_dq
+
         if n >= FMM_THRESHOLD:
             # with ContextTimer("FMM") as ct_fmm: 
             box.update_charges(q)
@@ -154,33 +206,31 @@ def relax(box, tr, r, q0, dt):
 
             box.collect_solutions(field=False)
 
-            phi = box.phi
+            phi = MAXWELL_FACTOR * box.phi
         else:
             # with ContextTimer("direct") as ct_direct:
+            if not HAS_PLANE_ELECTRODE:
+                rx, qx = r, q
+            else:
+                u = array([1, 1, -1])
+                rx = concatenate((r, r * u), axis=0)
+                qx = r_[q, -q]
+
+            phi0 = MAXWELL_FACTOR * mpolar.direct(rx.T, qx, r.T,
+                                                  CONDUCTOR_THICKNESS)
             phi = phi0
             
-        # print "q = ", q
-        # print "phi = ", phi
-
-        # err = sqrt(sum((phi - box.phi)**2)) / len(phi)
-        
-        # ftimes.write("%d\t%g\t%g\t%g\n" % (len(q),
-        #                                   ct_fmm.duration, ct_direct.duration,
-        #                                   err))
-        # ftimes.flush()
-        
-        # print "FMM error = %g" % err
+        # err = sqrt(sum((phi - box.phi)**2)) / len(phi)        
         latest_phi = phi
         error = phi - latest_phi
         error_dq = M.dot(error)
         
-        return M.dot(phi - dot(r, EXTERNAL_FIELD_VECTOR))
+        dq = M.dot(phi - dot(r, EXTERNAL_FIELD_VECTOR))
 
-    d = ode(f).set_integrator('dopri853',  nsteps=2000)
-    
+        return dq
+
+    d = ode(f).set_integrator('vode',  nsteps=50000, rtol=1e-7)
     d.set_initial_value(q0, 0.0)
-
-    #with ContextTimer("relaxing (n=%d)" % len(q0)):
     d.integrate(dt)
 
     return d.y

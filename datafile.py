@@ -18,6 +18,7 @@ class DataFile(object):
         self.main.attrs['ctime'] = time.ctime()
 
         for key, item in parameters.iteritems():
+            print key, item
             self.main.attrs[key] = item
         
         self.step = 0

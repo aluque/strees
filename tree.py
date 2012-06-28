@@ -30,7 +30,7 @@ class Tree(object):
 
 
     def parents(self, root_index=0):
-        """ Builds an array with the indices to each segment parent.
+        """ Builds an array with the indices to each segment's parent.
         The root segment gets an index root_index. """
         p = zeros((self.n,), dtype='i')
         for i, segment in enumerate(self.segments):
@@ -106,11 +106,11 @@ class Tree(object):
         an array with the endpoints. """
 
         parents = self.parents()
-        return 0.5 * (r + r[parents, :])
+        return 0.5 * (endpoints + endpoints[parents, :])
     
 
-    def ohm_matrix(self, endpoints):
-        """ Builds a matrix M that will give use the evolution of charges
+    def ohm_matrix(self, endpoints, fix=[]):
+        """ Builds a matrix M that will provide the evolution of charges
         in every segment of the tree as dq/dt = M . phi, where phi is
         the potential at the center of each segment and '.' is the dot product.
         This function builds the matrix from scratch.  Usually it is much
@@ -132,6 +132,9 @@ class Tree(object):
                 m -= a
 
             M[i, i] = m
+
+        for f in fix:
+            M[f, :] = 0
 
         return csr_matrix(M)
 

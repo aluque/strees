@@ -4,7 +4,7 @@ and is responsible for converting to the appropriate type, checking for
 allowed values.  The docstring of the function is a description of the
 parameter. """
 
-from readinput import positive, nonnegative
+from readinput import positive, nonnegative, default
 
 def run_name(s):
     """ Name of the run. """
@@ -19,12 +19,15 @@ def desc(s):
     return s
 
 
-@positive
+@default(-1)
 def random_seed(s):
-    """ Seed for the random generator. """
+    """ Seed for the random generator. If < 0 the system time is used (default)."""
     return int(s)
     
-    
+def dummy(s):
+    """ This parameter is completely ignored.  It is used only to produce
+    series of identical runs. """
+
 @positive
 def max_charges_per_box(s):
     """ Maximum number of charges per box in the FMM refinement scheme. """
@@ -51,6 +54,19 @@ def external_field(s):
 
 
 @positive
+def conductance(s):
+    """ Conductance of the channels. """
+    return float(s)
+
+
+@positive
+def maxwell_factor(s):
+    """ Maxwell factor for the potential and electric fields.  In SI units
+    it is 1 / 4 pi epsilon_0"""
+    return float(s)
+
+    
+@positive
 def tip_mobility(s):
     """ Ratio between the tip velocity of each streamer and the local field. """
     return float(s)
@@ -75,7 +91,7 @@ def conductor_thickness(s):
 
 @nonnegative
 def branching_probability(s):
-    """ Probability per unit time that a filament branches. """
+    """ Probability that a filament branches per unit distance travelled. """
     return float(s)
 
 
@@ -84,4 +100,15 @@ def branching_sigma(s):
     """ Standard deviation of the branching dispacement in the symmetric gaussian branching model. """
     return float(s)
 
+
+@default(0)
+@nonnegative
+def single_branching_time(s):
+    """ If nonzero, performs a single branching at the given time. """
+    return float(s)
+
+@default(False)
+def has_plane_electrode(s):
+    """ Whether there is an metal electrode at z=0. """
+    return bool(s)
 

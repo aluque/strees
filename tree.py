@@ -139,6 +139,59 @@ class Tree(object):
         return csr_matrix(M)
 
 
+    def branch_label(self, labels=None, label=1, segment=None):
+        """ Returns an array with an integer for each node that is unique
+        for the branch where it sits. """
+        
+        if labels is None:
+            labels = zeros((self.n,), dtype='i')
+
+        if segment is None:
+            segment = self.root
+        
+        while True:
+            labels[segment.index] = label
+            if len(segment.children) != 1:
+                break
+
+            segment = segment.children[0]
+        
+        for i, c in enumerate(segment.children):
+            self.branch_label(labels, label=2*label + i, segment=c)
+
+        return labels
+
+    
+    def branch_distance(self, endpoints, dist=None, segment=None,
+                        lengths=None):
+        """ Returns an array with the distance of each node from the
+        branching immediately above it. The distance is calculated along the
+        branch. """
+        if dist is None:
+            dist = zeros((self.n,), dtype='d')
+
+        if segment is None:
+            segment = self.root
+        
+        if lengths is None:
+            lengths = self.lengths(endpoints)
+            
+        l = 0
+        while True:
+            dist[segment.index] = l
+            l += lengths[segment.index]
+            
+            if len(segment.children) != 1:
+                break
+
+            segment = segment.children[0]
+        
+        for i, c in enumerate(segment.children):
+            self.branch_distance(endpoints, dist, segment=c, lengths=lengths)
+
+        return dist
+
+
     def save(self, fname):
         """ Saves the tree structure into file fname. """
         parents = self.parents()
@@ -224,6 +277,7 @@ class Segment(object):
         self.children.append(other)
 
     
+
 def random_branching_tree(n, p):
     """ Builds a branched tree of n segments where every segment has a
     probability p of having two descendants.  This produces nice pictures

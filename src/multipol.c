@@ -4,6 +4,7 @@
 #include "complex.h"
 
 #define MP_USE_NUMARRAY
+#undef MP_MATCHED_PHI
 
 #include "streamer3d.h"
 #include "misc.h"
@@ -158,7 +159,7 @@ mp_phase_factor(int m, double x, double y)
 /*  Calculates the multipole moments of a distribution of k charges given
     in ARRAY.
     maxl               order of the expansion
-    r                  array with shape [3, k] with the location of the 
+    r                  array with shape [k, 3] with the location of the 
                        charges
     q                  array with shape [k] with the value of the charges
     inout              inout > 0 means outward, inout < 0 means inward
@@ -183,9 +184,9 @@ mp_expand (int maxl, mp_array *r, mp_array *q, int inout)
     double x, y, z, rho;
     double iq, rpow;
     
-    x = * (double*) mp_array_getptr2(r, X, i);
-    y = * (double*) mp_array_getptr2(r, Y, i);
-    z = * (double*) mp_array_getptr2(r, Z, i);
+    x = * (double*) mp_array_getptr2(r, i, X);
+    y = * (double*) mp_array_getptr2(r, i, Y);
+    z = * (double*) mp_array_getptr2(r, i, Z);
 
     iq = * (double*) mp_array_getptr1(q, i);
 
@@ -296,7 +297,7 @@ mp_eval_array (mp_array* lm, mp_array *r,  int inout)
   maxl = mp_array_dim(lm, 0);
 
   /* This is the number of points. */
-  k = mp_array_dim(r, 1);
+  k = mp_array_dim(r, 0);
 
   phi = (mp_array*) (mp_array_from_dims (1, (npy_intp*) &k, mp_DOUBLE));
 
@@ -304,9 +305,9 @@ mp_eval_array (mp_array* lm, mp_array *r,  int inout)
     double x, y, z, rho;
     double rpow, sum, *ptr;
     
-    x = * (double*) mp_array_getptr2(r, X, i);
-    y = * (double*) mp_array_getptr2(r, Y, i);
-    z = * (double*) mp_array_getptr2(r, Z, i);
+    x = * (double*) mp_array_getptr2(r, i, X);
+    y = * (double*) mp_array_getptr2(r, i, Y);
+    z = * (double*) mp_array_getptr2(r, i, Z);
 
     rho = sqrt(x * x + y * y + z * z);
 
@@ -372,10 +373,10 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
   maxl = mp_array_dim(lm, 0);
 
   /* This is the number of points. */
-  k = mp_array_dim(r, 1);
+  k = mp_array_dim(r, 0);
 
-  dim[0] = 3;
-  dim[1] = k;
+  dim[0] = k;
+  dim[1] = 3;
   
   field = (mp_array*) (mp_array_from_dims (2, dim, mp_DOUBLE));
 
@@ -385,9 +386,9 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
     double rpow, erho, etheta, ephi, *ptr;
     int maxl1;
 
-    x = * (double*) mp_array_getptr2(r, X, i);
-    y = * (double*) mp_array_getptr2(r, Y, i);
-    z = * (double*) mp_array_getptr2(r, Z, i);
+    x = * (double*) mp_array_getptr2(r, i, X);
+    y = * (double*) mp_array_getptr2(r, i, Y);
+    z = * (double*) mp_array_getptr2(r, i, Z);
 
     rho = sqrt(x * x + y * y + z * z);
     rhoxy = sqrt(x * x + y * y);
@@ -462,15 +463,15 @@ mp_eval_field_array (mp_array* lm, mp_array *r,  int inout)
 
     /* The minus signs appear here b.c. E = -grad(phi) */
     /* X */
-    ptr = (double *) mp_array_getptr2 (field, X, i);
+    ptr = (double *) mp_array_getptr2 (field, i, X);
     *ptr = -(erho * x / rho + etheta * cosphi * z / rho - ephi * sinphi);
 
     /* Y */
-    ptr = (double *) mp_array_getptr2 (field, Y, i);
+    ptr = (double *) mp_array_getptr2 (field, i, Y);
     *ptr = -(erho * y / rho + etheta * sinphi * z / rho + ephi * cosphi);
 
     /* Z */
-    ptr = (double *) mp_array_getptr2 (field, Z, i);
+    ptr = (double *) mp_array_getptr2 (field, i, Z);
     *ptr = -(erho * z / rho - etheta * rhoxy / rho);
 
   }
@@ -684,14 +685,14 @@ mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
   n = mp_array_dim (q, 0);
 
   /* The number of evaluation points: */
-  m = mp_array_dim (reval, 1);
+  m = mp_array_dim (reval, 0);
 
   phi = (mp_array*) PyArray_ZEROS (1, &m, mp_DOUBLE, 0);
 
   for (j = 0; j < m; j++) {
-    x = * (double*) mp_array_getptr2 (reval, X, j);
-    y = * (double*) mp_array_getptr2 (reval, Y, j);
-    z = * (double*) mp_array_getptr2 (reval, Z, j);
+    x = * (double*) mp_array_getptr2 (reval, j, X);
+    y = * (double*) mp_array_getptr2 (reval, j, Y);
+    z = * (double*) mp_array_getptr2 (reval, j, Z);
     phi_ptr = (double*) mp_array_getptr1 (phi, j);
 
     *phi_ptr = 0;
@@ -699,31 +700,31 @@ mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
     for (i = 0; i < n; i++) {
       double rn;
 
-      dx = * (double*) mp_array_getptr2 (r, X, i) - x;
-      dy = * (double*) mp_array_getptr2 (r, Y, i) - y;
-      dz = * (double*) mp_array_getptr2 (r, Z, i) - z;
+      dx = * (double*) mp_array_getptr2 (r, i, X) - x;
+      dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
+      dz = * (double*) mp_array_getptr2 (r, i, Z) - z;
       q0 = * (double*) mp_array_getptr1 (q, i);
      
       rn = sqrt(dx * dx + dy * dy + dz * dz);
       /* This is important since often the source and measuring points will be
 	 the same and we do not like infinities around here. */
-      /* if (a > 0 || rn > 0.0) { */
-      /* 	*phi_ptr += q0 / (rn + a); */
-      /* 	printf ("epsilon = %g\tphi0 = %g\tphi1 = %g\n", a / rn,  */
-      /* 		q0 / (rn + a), q0 / rn); */
-      /* } */
-
+#ifndef MP_MATCHED_PHI
+      if (a > 0 || rn > 0.0) {
+	*phi_ptr += q0 / (rn + a);
+      }
       /* Here we build an approximation to the thin-wire potential.
 	 The potential we would like goes like 1 / (r + a) but this is
 	 incompatible with the FMM method.  Instead, we look for a potential
 	 that is identical to q / r outside a given ball around q.  We also
 	 impose that the potential goes to 1 / a as r -> 0 and that it is
 	 continuous and monotonic. */
+#else
       if (rn > 2 * a) {
       	*phi_ptr += q0 / rn;
       } else {
       	if (a > 0) *phi_ptr += q0 / (a + 0.5 * rn);
       }
+#endif
     }
   }
 
@@ -747,30 +748,30 @@ mp_field_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
   n = mp_array_dim (q, 0);
 
   /* The number of evaluation points: */
-  m = mp_array_dim (reval, 1);
+  m = mp_array_dim (reval, 0);
 
-  dim[0] = 3;
-  dim[1] = m;
+  dim[0] = m;
+  dim[1] = 3;
 
   field = (mp_array*) PyArray_ZEROS (2, dim, mp_DOUBLE, 0);
 
   for (j = 0; j < m; j++) {
-    x = * (double*) mp_array_getptr2 (reval, X, j);
-    y = * (double*) mp_array_getptr2 (reval, Y, j);
-    z = * (double*) mp_array_getptr2 (reval, Z, j);
+    x = * (double*) mp_array_getptr2 (reval, j, X);
+    y = * (double*) mp_array_getptr2 (reval, j, Y);
+    z = * (double*) mp_array_getptr2 (reval, j, Z);
 
-    f_ptr_x = (double*) mp_array_getptr2 (field, X, j);
-    f_ptr_y = (double*) mp_array_getptr2 (field, Y, j);
-    f_ptr_z = (double*) mp_array_getptr2 (field, Z, j);
+    f_ptr_x = (double*) mp_array_getptr2 (field, j, X);
+    f_ptr_y = (double*) mp_array_getptr2 (field, j, Y);
+    f_ptr_z = (double*) mp_array_getptr2 (field, j, Z);
 
     *f_ptr_x = *f_ptr_y = *f_ptr_z = 0;
 
     for (i = 0; i < n; i++) {
       double rn;
 
-      dx = * (double*) mp_array_getptr2 (r, X, i) - x;
-      dy = * (double*) mp_array_getptr2 (r, Y, i) - y;
-      dz = * (double*) mp_array_getptr2 (r, Z, i) - z;
+      dx = * (double*) mp_array_getptr2 (r, i, X) - x;
+      dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
+      dz = * (double*) mp_array_getptr2 (r, i, Z) - z;
       q0 = * (double*) mp_array_getptr1 (q, i);
      
       rn = sqrt(dx * dx + dy * dy + dz * dz);

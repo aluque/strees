@@ -171,15 +171,15 @@ direct (PyObject *self, PyObject *args)
      return NULL;
   }
 
-  if (r->dimensions[0] != 3) {
+  if (r->dimensions[1] != 3) {
      PyErr_SetString(PyExc_ValueError, 
-		     "r must have shape (3, N).");
+		     "r must have shape (N, 3).");
      return NULL;
   }
 
-  if (reval->dimensions[0] != 3) {
+  if (reval->dimensions[1] != 3) {
      PyErr_SetString(PyExc_ValueError, 
-		     "reval must have shape (3, N).");
+		     "reval must have shape (N, 3).");
      return NULL;
   }
 
@@ -215,15 +215,15 @@ field_direct (PyObject *self, PyObject *args)
      return NULL;
   }
 
-  if (r->dimensions[0] != 3) {
+  if (r->dimensions[1] != 3) {
      PyErr_SetString(PyExc_ValueError, 
-		     "r must have shape (3, N).");
+		     "r must have shape (N, 3).");
      return NULL;
   }
 
-  if (reval->dimensions[0] != 3) {
+  if (reval->dimensions[1] != 3) {
      PyErr_SetString(PyExc_ValueError, 
-		     "reval must have shape (3, N).");
+		     "reval must have shape (N, 3).");
      return NULL;
   }
 

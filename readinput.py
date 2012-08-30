@@ -8,6 +8,8 @@ from warnings import warn
 from itertools import product
 import re
 
+import numpy
+
 def guess_type(s):
     """ Converts s into int or float if possible.  If not, leave it as a
     string. This will give us problems if the user wants to e.g. use
@@ -107,6 +109,7 @@ def load_input(fname, parameters, d=None, upper=False, raw=False):
 
 
 RE_LIST = re.compile(r'@\((.+)\)')
+RE_LOOP = re.compile(r'@@\(([\d.-]+):([\d.-]+)(:([\d.-]+))?\)')
 def expand(s, parser):
     """ Expands special characters to produce e.g. lists of many parameters.
     """
@@ -116,8 +119,19 @@ def expand(s, parser):
 
     m = RE_LIST.match(s)
     if m:
-        print s
         return [parser(x) for x in m.group(1).split()]
+
+    m = RE_LOOP.match(s)
+    if m:
+        if m.group(4) is not None:
+            a, b, c = parser(m.group(1)), parser(m.group(2)), parser(m.group(4))
+        else:
+            a, b, c = parser(m.group(1)), parser(m.group(2)), None            
+        r = numpy.arange(a, b, c)
+        print r
+        print [parser(x) for x in r]
+        return [parser(str(x)) for x in r]
+
 
 
 def expand_dict(d):

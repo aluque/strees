@@ -17,20 +17,16 @@ INWARD, INOUT, OUTWARD = -1, 0, 1
 class Box(object):
     """ Class of 3d boxes.  Each box can be linked to a set of charges."""
 
-    def __init__(self, r0, r1, parent=None, rel_coords=None, reflect=False):
+    def __init__(self, r0, r1, parent=None, rel_coords=None,
+                 electrode=None):
         """ Initializes a box.  r0 contains the smaller (x, y, z) coordinates
         and r1 the largest (x, y, z).
-        If reflect is true, we add image charges located at (x, y, -z) for
-        each (x, y, z) and with charge -q.  This is used to implement an
-        electrode at z=0.
-
         """
         
         self.r0 = r0
         self.r1 = r1
         self.center = 0.5 * (r0 + r1)
         self.lengths = (r1 - r0)
-        self.reflect = reflect
         
         self.children = []
         self.parent = parent
@@ -48,7 +44,7 @@ class Box(object):
             self.coords = parent.coords * 2 + rel_coords
 
         self.rf = None
-    
+        self.electrode = electrode
 
     def clear(self, recurse=True):
         self.outward, self.inward = None, None
@@ -85,17 +81,14 @@ class Box(object):
 
         if evaluation:
             self.rv = self.r
-            self.phi = zeros((self.r.shape[1],))
+            self.phi = zeros((self.r.shape[0],))
             
         # We do the reflection that implements the image charge method after
         # setting the evaluation points because we are not usually interested
         # in evaluating "image fields".
-        if self.reflect:
-            # Multiplying by u inverts the third coordinate (Z).
-            u = array([1, 1, -1])[:, newaxis]
-            self.r = concatenate((self.r, self.r * u), axis=1)
-            self.q = r_[self.q, -self.q]
-            self.n = 2 * self.n
+        if self.electrode:
+            self.r, self.q = self.electrode.extend(self.r, self.q)
+            self.n = len(self.q)
 
         if (max_charges is not None and self.n > max_charges
             and 2 * min_length < self.lengths[0]):
@@ -106,14 +99,14 @@ class Box(object):
 
             self.flt = empty([8, len(self.q)], dtype=bool)
             if evaluation:
-                # Note that when reflect=True self.q and q are not the same
+                # Note that when electrode != None self.q and q are not the same
                 # (the former includes the reflections).  To evaluate only
                 # at self.rv we create a view of the first half of flt.
                 self.fltv = self.flt[:, :len(q)].view()
                 
             for i, child in enumerate(self.children):
                 self.flt[i, :] = (indices == i)
-                child.set_charges(self.r[:, self.flt[i, :]],
+                child.set_charges(self.r[self.flt[i, :], :],
                                   self.q[self.flt[i, :]],
                                   max_charges=max_charges,
                                   evaluation=evaluation)
@@ -123,8 +116,8 @@ class Box(object):
         """ Recursively re-set the charges contained in the box.  This
         keeps the refinement oct-tree. """
 
-        if self.reflect:
-            q = r_[q, -q]
+        if self.electrode is not None:
+            q = r_[q, self.electrode.images_q(self.r, q)]
         
         self.q[:] = q
         for i, child in enumerate(self.children):
@@ -137,14 +130,14 @@ class Box(object):
         """
         
         self.rv = rv
-        self.phi = zeros((self.rv.shape[1],))
+        self.phi = zeros((self.rv.shape[0],))
         indices = self._indices(rv)
 
         self.fltv = empty([8, len(self.phi)], dtype=bool)
 
         for i, child in enumerate(self.children):
             self.fltv[i, :] = (indices == i)
-            child.set_evaluation(rv[:, self.fltv[i, :]])
+            child.set_evaluation(rv[self.fltv[i, :], :])
 
 
     def set_field_evaluation(self, rf):
@@ -152,21 +145,21 @@ class Box(object):
         """
         
         self.rf = rf
-        self.field = zeros((3, self.rf.shape[1],))
+        self.field = zeros((self.rf.shape[0], 3))
         indices = self._indices(rf)
 
-        self.fltf = empty([8, self.rf.shape[1]], dtype=bool)
+        self.fltf = empty([8, self.rf.shape[0]], dtype=bool)
 
         for i, child in enumerate(self.children):
             self.fltf[i, :] = (indices == i)
             #print self.fltf[i, :]
             if any(self.fltf[i, :]):
-                child.set_field_evaluation(rf[:, self.fltf[i, :]])
+                child.set_field_evaluation(rf[self.fltf[i, :], :])
         
         
     def _indices(self, r):
         """ Finds the child indices (from 0 to 7) of the points at r. """
-        bits = (2 * (r - self.r0[:, newaxis]) / self.lengths[:, newaxis])
+        bits = (2 * (r - self.r0[newaxis, :]) / self.lengths[newaxis, :])
         bits = bits.astype('i')
 
         # We do not want to exclude the boundaries with higher values
@@ -175,7 +168,7 @@ class Box(object):
         p2 = array([4, 2, 1])
 
         # This is the index of the chid where each charge is sitting
-        return dot(p2, bits)
+        return dot(bits, p2)
 
 
     def collect_solutions(self, field=False):
@@ -189,7 +182,7 @@ class Box(object):
             if field and child.rf is not None:
                 # Note that if child contains field evaluation points,
                 # then self do too.
-                self.field[:, self.fltf[i, :]] = child.field
+                self.field[self.fltf[i, :], :] = child.field
 
 
     def is_near_neighbour(self, other):
@@ -241,7 +234,7 @@ class Box(object):
     def expand(self, p):
         """ Directly calculates the multipolar expansion of this box
         around its center. """
-        self.outward = mpolar.expand(p, self.r - self.center[:, newaxis],
+        self.outward = mpolar.expand(p, self.r - self.center[newaxis, :],
                                     self.q, OUTWARD)
         
 
@@ -322,9 +315,9 @@ class Box(object):
         """ Once we have the local expansion for the box and the list
         of near-neighbours, we can finally evaluate the potential.
         Note that generally this function is called only for leaf nodes. """
-        
+
         self.phi[:] = mpolar.eval_array(self.inward,
-                                        self.rv - self.center[:, newaxis],
+                                        self.rv - self.center[newaxis, :],
                                         INWARD)
 
         for other in self.neighbours:
@@ -333,7 +326,7 @@ class Box(object):
 
         if field and self.rf is not None:
             self.field[:, :] = mpolar.eval_field_array(
-                self.inward, self.rf - self.center[:, newaxis],
+                self.inward, self.rf - self.center[newaxis, :],
                 INWARD)
             for other in self.neighbours:
                 self.field += mpolar.field_direct(other.r, other.q, self.rf, a)
@@ -365,8 +358,8 @@ class Box(object):
         if len(self.phi) == 0:
             return
         
-        x = self.rv[dims[0], :]
-        y = self.rv[dims[1], :]
+        x = self.rv[:, dims[0]]
+        y = self.rv[:, dims[1]]
         pylab.scatter(x, y, c=self.phi, **kwargs)
         
 
@@ -383,20 +376,18 @@ class Box(object):
         return "(%s)@%d" % (str(self.coords), self.level)
 
 
-def containing_box(r, reflect=False):
+def containing_box(r, electrode=None):
     """ Builds a Box object that contains all k points in r[3, k].
     The Box has to be a perfect cube for the FMM to work.
     If reflect is True, inludes also the reflection of all points
     over the z=0 plane.
     """
 
-    if reflect:
-        # Multiplying by u inverts the third coordinate (Z).
-        u = array([1, 1, -1])[:, newaxis]
-        r = concatenate((r, r * u), axis=1)
+    if electrode is not None:
+        r = concatenate((r, electrode.images_r(r)), axis=0)
         
-    rmin = amin(r, axis=1)
-    rmax = amax(r, axis=1)
+    rmin = amin(r, axis=0)
+    rmax = amax(r, axis=0)
     
     lengths = rmax - rmin
     center = 0.5 * (rmax + rmin)
@@ -405,14 +396,14 @@ def containing_box(r, reflect=False):
     r0 = center - sides / 2
     r1 = center + sides / 2
     
-    return Box(r0, r1, reflect=reflect)
+    return Box(r0, r1, electrode=electrode)
 
 
 
 def main():
     k = 1200
     
-    r = random.uniform(-1, 1, size=(3, k))
+    r = random.uniform(-1, 1, size=(k, 3))
     q = random.uniform(-1.0, 1.0, size=k)
 
     # Let's make things simpler
@@ -438,7 +429,7 @@ def main():
     box.solve_all()
     box.collect_solutions()
 
-    phi = mpolar.direct(r, q, r)
+    phi = mpolar.direct(r, q, r, 0.0)
 
     box.scatter_leafs(vmin=0, vmax=1200)
     pylab.colorbar()
@@ -451,7 +442,7 @@ def main():
     pylab.ylim([-1, 1])
 
 
-    pylab.scatter(r[0, :], r[1, :],
+    pylab.scatter(r[:, 0], r[:, 1],
                   c=phi, vmin=0, vmax=1200)
     pylab.colorbar()
 

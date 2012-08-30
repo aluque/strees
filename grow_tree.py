@@ -1,3 +1,14 @@
+# NOTES:
+#
+# In this module and in all the rest, the geometrical dimension always
+# corresponds to the last axis of an array.  For example to save the locations
+# of k points we use an array with shape [k, 3].
+#
+# All-caps variable names are in general global variables that are read
+# from the input file.  We use globals().update(...) so they are avaliable
+# everywhere.
+#
+
 import sys
 import time
 
@@ -14,31 +25,18 @@ from datafile import DataFile
 import os.path
 from angles import branching_angles
 import parameters as param_descriptors
-
+import electrodes
 from contexttimer import ContextTimer
-
-# MAX_CHARGES_PER_BOX = 200
-# MULTIPOLAR_TERMS = 5
-# CONDUCTOR_THICKNESS = 0.001
-# EXTERNAL_FIELD = array([0.0, 0.0, -5.0])
-# TIP_MOBILITY = 1.0
-# END_TIME = 1.0
-# TIME_STEP = 1e-4
-# BRANCHING_PROBABILITY = 100.
-# BRANCHING_SIGMA = 1e-4
-# RUN_NAME = sys.argv[1]
-# OUT_FILE = os.path.expanduser('~/data/trees/%s.h5' % sys.argv[1])
-
-# # Use the FMM solver only when we have more than this number of charges
-# FMM_THRESHOLD = 4000
 
 latest_phi = None
 EXTERNAL_FIELD_VECTOR = None
+ELECTRODE = None
+X, Y, Z = 0, 1, 2
 
 def main():
     # Load input parameters from the input file and add the, in allcaps
     # to the global namespace.
-    global EXTERNAL_FIELD_VECTOR
+    global EXTERNAL_FIELD_VECTOR, ELECTRODE
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
@@ -46,6 +44,7 @@ def main():
         seed(RANDOM_SEED)
     
     EXTERNAL_FIELD_VECTOR = array([0.0, 0.0, EXTERNAL_FIELD])
+    ELECTRODE = init_electrode()
     
     # init a tree from scratch
     tr, r0, q0 = init_from_scratch()
@@ -68,6 +67,13 @@ def main():
 
         if SINGLE_BRANCHING_TIME > 0:
             if it > SINGLE_BRANCHING_TIME:
+                if not branched:
+                    branch_prob = inf
+                    branched = True
+
+        if SINGLE_BRANCHING_Z != 0 and not branched:
+            zterm = r[tr.terminals()[0], Z]
+            if zterm < SINGLE_BRANCHING_Z:
                 if not branched:
                     branch_prob = inf
                     branched = True
@@ -98,12 +104,12 @@ def init_from_scratch():
     
 def step(tr, r, q0, t, dt, p=0.0):
     iterm = tr.terminals()
-    box = containing_box(r.T, reflect=HAS_PLANE_ELECTRODE)
-    box.set_charges(r.T, q0,
+    box = containing_box(r, electrode=ELECTRODE)
+    box.set_charges(r, q0,
                     max_charges=MAX_CHARGES_PER_BOX,
                     min_length=16 * CONDUCTOR_THICKNESS)
     box.build_lists(recurse=True)
-    box.set_field_evaluation(r.T[:, iterm])
+    box.set_field_evaluation(r[iterm, :])
 
     # 1. Calculate the velocities at t
     v0 = velocities(box, tr, r, q0)
@@ -116,30 +122,31 @@ def step(tr, r, q0, t, dt, p=0.0):
 
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
-
+    
     # 5. Branch some of the tips
-    vabs = sqrt(sum(v**2, axis=0))
+    vabs = sqrt(sum(v**2, axis=1))
     does_branch = rand(*iterm.shape) < (p * vabs * dt)
-
+    
     ## if t >= 1.30e-7:
     ##     print "<relaxing only>"
     ##     return r, q1
 
     # print "%d active branches" % len(iterm)
     
-    radv = empty((3, sum(does_branch) + len(iterm)))
+    radv = empty((sum(does_branch) + len(iterm), 3))
     j = 0
+    
     for i, branches in enumerate(does_branch):
         if not branches:
-            radv[:, j] = r.T[:, iterm[i]] + dt * v[:, i]
+            radv[j, :] = r[iterm[i], :] + dt * v[i, :]
             j += 1
         else:
-            dr1, dr2 = symmetric_gaussian(dt * v[:, i], BRANCHING_SIGMA)
-            radv[:, j] = r.T[:, iterm[i]] + dr1
-            radv[:, j + 1] = r.T[:, iterm[i]] + dr2
+            dr1, dr2 = symmetric_gaussian(dt * v[i, :], BRANCHING_SIGMA)
+            radv[j, :] = r[iterm[i], :] + dr1
+            radv[j + 1, :] = r[iterm[i], :] + dr2
             j += 2
     
-    rnew = concatenate((r, radv.T), axis=0)
+    rnew = concatenate((r, radv), axis=0)
     qnew = concatenate((q1, zeros((sum(does_branch) + len(iterm), ))), axis=0)
 
     tr.extend(sort(r_[iterm, iterm[does_branch]]))
@@ -150,10 +157,12 @@ def velocities(box, tr, r, q):
     """ Calculates the electric fields at the tips of the tree and from
     them obtains the propagation velocities of the "streamers" """
 
+    iterm = tr.terminals()
+
     # When we have a single charge the velocity is simply given by the
-    # external electri field
+    # external electric field
     if len(q) == 1:
-        return TIP_MOBILITY * EXTERNAL_FIELD_VECTOR[:, newaxis]
+        return TIP_MOBILITY * external_field(r[iterm, :])
     
     box.update_charges(q)
     box.upward(MULTIPOLAR_TERMS)
@@ -161,12 +170,13 @@ def velocities(box, tr, r, q):
     box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
     
     box.collect_solutions(field=True)
-    sfields = self_fields(tr, r, q).T
+    sfields = self_fields(tr, r, q)
 
     v = TIP_MOBILITY * (MAXWELL_FACTOR * box.field
                         + MAXWELL_FACTOR * sfields
-                        + EXTERNAL_FIELD_VECTOR[:, newaxis])
+                        + external_field(r[iterm, :]))
     return v
+
 
 def self_fields(tr, r, q):
     """ Calculates the fields created by the charges at the streamer tips
@@ -188,7 +198,7 @@ def relax(box, tr, r, q0, t, dt):
     #with ContextTimer("re-computing Ohm matrix"):
     # If we have an electrode, we fix q[0] by setting the first row of
     # M to zero.  
-    fix = [] if not HAS_PLANE_ELECTRODE else [0]
+    fix = [] if ELECTRODE is None else [0]
     
     M = 2 * CONDUCTANCE * tr.ohm_matrix(r, fix=fix)
     n = len(q0)
@@ -209,14 +219,12 @@ def relax(box, tr, r, q0, t, dt):
             phi = MAXWELL_FACTOR * box.phi
         else:
             # with ContextTimer("direct") as ct_direct:
-            if not HAS_PLANE_ELECTRODE:
+            if ELECTRODE is None:
                 rx, qx = r, q
             else:
-                u = array([1, 1, -1])
-                rx = concatenate((r, r * u), axis=0)
-                qx = r_[q, -q]
-
-            phi0 = MAXWELL_FACTOR * mpolar.direct(rx.T, qx, r.T,
+                rx, qx = ELECTRODE.extend(r, q)
+            
+            phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
                                                   CONDUCTOR_THICKNESS)
             phi = phi0
             
@@ -225,7 +233,7 @@ def relax(box, tr, r, q0, t, dt):
         error = phi - latest_phi
         error_dq = M.dot(error)
         
-        dq = M.dot(phi - dot(r, EXTERNAL_FIELD_VECTOR))
+        dq = M.dot(phi + external_potential(r))
 
         return dq
 
@@ -253,12 +261,84 @@ def symmetric_gaussian(dr, sigma):
     
     e2 = cross(u, e1)
 
-    p, q = sigma * randn(2)
-
+    if not BRANCH_IN_XZ:
+        p, q = sigma * randn(2)
+    else:
+        p, q = sigma * randn(), 0.0
+    
     dr1 = dr + (p * e1 + q * e2)
     dr2 = dr - (p * e1 + q * e2)
 
     return dr1, dr2
+
+
+def external_field(r):
+    """ Calculates the external field at points r.  This is calculated
+    from EXTERNAL_FIELD and ELECTRODE_POTENTIAL.  As the code stands now
+    only these two possibilities are physically meaningful:
+     1. Specify EXTERNAL_FIELD with a planar electrode or with no electrode,
+        but use ELECTRODE_POTENTIAL=0.
+     2. ELECTRODE_POTENTIAL != 0, but ELECTRODE_GEOMETRY = 'sphere' and
+        EXTERNAL_FIELD = 0.
+    However, we allow the user to soot himself on his foot, so he can
+    select any arbitrary combination of these parameters.  Beware.
+    """
+    field = EXTERNAL_FIELD_VECTOR[newaxis, :]
+    
+    if ELECTRODE_POTENTIAL == 0:
+        return field
+
+    center = array([0.0, 0.0, ELECTRODE_RADIUS])
+    dr = r - center[newaxis, :]
+    rabs = sqrt(sum(dr**2, axis=1))
+    field = field + (ELECTRODE_RADIUS * ELECTRODE_POTENTIAL
+                     * dr / rabs[:, newaxis]**3)
+
+    return field
+
+
+def external_potential(r):
+    """ Calculates the external potential at points r.  See above, in
+    external_field for the risks here.
+    """
+    phi = -dot(r, EXTERNAL_FIELD_VECTOR)
+
+    if ELECTRODE_POTENTIAL == 0:
+        return phi
+
+    center = array([0.0, 0.0, ELECTRODE_RADIUS])
+    dr = r - center[newaxis, :]
+    rabs = sqrt(sum(dr**2, axis=1))
+    phi = phi + ELECTRODE_RADIUS * ELECTRODE_POTENTIAL / rabs
+
+    return phi
+
+
+
+def init_electrode():
+    """ Uses the input parameters to select an electrode geometry. """
+    def planar():
+        """ Planar electrode.  Always located at z=0. """
+        return electrodes.Planar(0)
+
+    def sphere():
+        """ Sphere electrode.  Located at [0, 0, -ELECTRODE_RADIUS]. """
+        center = array([0.0, 0.0, ELECTRODE_RADIUS])
+        return electrodes.Sphere(center, ELECTRODE_RADIUS)
+
+    def null():
+        """ No electrode. """
+        # return electrodes.NullElectrode()
+        # This is actually faster:
+        return None
+
+    d = dict(planar=planar, plane=planar, sphere=sphere, null=null, none=null)
+    
+    try:
+        return d[ELECTRODE_GEOMETRY]()
+    except KeyError:
+        raise KeyError("Electrode geometry '%s' not recognized"
+                       % ELECTRODE_GEOMETRY)
 
 
 def plot_projections(r, q):

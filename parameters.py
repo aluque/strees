@@ -107,8 +107,30 @@ def single_branching_time(s):
     """ If nonzero, performs a single branching at the given time. """
     return float(s)
 
-@default(False)
-def has_plane_electrode(s):
-    """ Whether there is an metal electrode at z=0. """
-    return bool(s)
 
+@default(0)
+def single_branching_z(s):
+    """ If nonzero, performs a single branching at the given z. """
+    return float(s)
+
+
+@default(False)
+def branch_in_xz(s):
+    """ If true, branches always within the XZ plane. """
+    return (s.lower() == 'true')
+
+@default('null')
+def electrode_geometry(s):
+    """ The electrode geometry. """
+    return s.lower()
+
+
+@positive
+def electrode_radius(s):
+    """ Radius of an spherical electrode. """
+    return float(s)
+
+@default(0)
+def electrode_potential(s):
+    """ Electrostatic potential of a (spherical) electrode. """
+    return float(s)

@@ -49,6 +49,9 @@ def build_linop(r, reval, conductor_thickness):
     return LinearOperator((reval.shape[1], r.shape[1]), f_phi, dtype='float64')
 
 
+def build_poisson_matrix(r, reval, conductor_thickness):
+    
+
 def main():
     ztip = -0.01
     
@@ -61,7 +64,7 @@ def main():
 
     fp = h5py.File(fname, "r")
     g = fp['main']
-    r = array(g[step]['r']).T
+    r = array(g[step]['r'])
     q = array(g[step]['q'])
     phi0 = array(g[step]['phi'])
 
@@ -71,7 +74,7 @@ def main():
     HAS_PLANAR_ELECTRODE = fp['main'].attrs['has_plane_electrode']
     print "%d charges" % len(q)
 
-    r[2, :] += ztip
+    r[:, 2] += ztip
     rt = concatenate((rp, r), axis=1)
 
     # 1. Compute the potential created at the sources and in the phi points

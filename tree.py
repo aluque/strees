@@ -125,11 +125,17 @@ class Tree(object):
         for segment in self:
             i = segment.index
             m = 0.0
-            for other in segment.iter_adjacent():
+            for other in segment.children:
                 j = other.index
-                a = 2.0 / (l[i] + l[j])
+                a = 1.0 / l[j]
                 M[i, j] = a
                 m -= a
+
+            if segment.parent is not None:
+                j = segment.parent.index
+                a = 1.0 / l[i]
+                M[i, j] = a
+                m -= a                
 
             M[i, i] = m
 
@@ -258,14 +264,11 @@ class Segment(object):
 
 
     def iter_adjacent(self):
-        """ Iterates over all adjacent segments, including parent,
-        children (if any) and brothers (if any). """
+        """ Iterates over all adjacent segments, including parent and
+        children (if any). """
 
         if self.parent is not None:
             yield self.parent
-            for brother in self.parent.children:
-                if self != brother:
-                    yield brother
 
         for child in self.children:
             yield child

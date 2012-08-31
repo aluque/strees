@@ -109,6 +109,7 @@ class Plotter(object):
         p, l, r = p[:n], l[:n], r[:n]
         midpoints = midpoints[:n]
         
+        print self.external_field_vector
         phi = phi - dot(r, self.external_field_vector)
         
         efields = (phi - phi[p]) / l

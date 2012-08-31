@@ -81,7 +81,8 @@ def main():
         r, q = step(tr, r, q, it, dt, p=branch_prob)
 
         with ContextTimer("saving %d" % i):
-            dfile.add_step(it, tr, r, q, latest_phi,
+            phi = solve_phi(r, q)
+            dfile.add_step(it, tr, r, q, phi,
                            error=error, error_dq=error_dq)
             
 
@@ -200,34 +201,16 @@ def relax(box, tr, r, q0, t, dt):
     # M to zero.  
     fix = [] if ELECTRODE is None else [0]
     
-    M = 2 * CONDUCTANCE * tr.ohm_matrix(r, fix=fix)
+    # On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know
+    # where it comes from.  Probably it was a reliq of the mid-points approach
+    # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
+    M = CONDUCTANCE * tr.ohm_matrix(r, fix=fix)
     n = len(q0)
     
     def f(t0, q):
         global latest_phi, error, error_dq
 
-        if n >= FMM_THRESHOLD:
-            # with ContextTimer("FMM") as ct_fmm: 
-            box.update_charges(q)
-
-            box.upward(MULTIPOLAR_TERMS)
-            box.downward()
-            box.solve_all(a=CONDUCTOR_THICKNESS, field=False)
-
-            box.collect_solutions(field=False)
-
-            phi = MAXWELL_FACTOR * box.phi
-        else:
-            # with ContextTimer("direct") as ct_direct:
-            if ELECTRODE is None:
-                rx, qx = r, q
-            else:
-                rx, qx = ELECTRODE.extend(r, q)
-            
-            phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
-                                                  CONDUCTOR_THICKNESS)
-            phi = phi0
-            
+        phi = solve_phi(r, q, box)
         # err = sqrt(sum((phi - box.phi)**2)) / len(phi)        
         latest_phi = phi
         error = phi - latest_phi
@@ -242,6 +225,32 @@ def relax(box, tr, r, q0, t, dt):
     d.integrate(dt)
 
     return d.y
+
+
+def solve_phi(r, q, box=None):
+    if len(q) >= FMM_THRESHOLD:
+        # with ContextTimer("FMM") as ct_fmm: 
+        box.update_charges(q)
+
+        box.upward(MULTIPOLAR_TERMS)
+        box.downward()
+        box.solve_all(a=CONDUCTOR_THICKNESS, field=False)
+
+        box.collect_solutions(field=False)
+
+        phi = MAXWELL_FACTOR * box.phi
+    else:
+        # with ContextTimer("direct") as ct_direct:
+        if ELECTRODE is None:
+            rx, qx = r, q
+        else:
+            rx, qx = ELECTRODE.extend(r, q)
+
+        phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
+                                              CONDUCTOR_THICKNESS)
+        phi = phi0
+
+    return phi
 
 
 def symmetric_gaussian(dr, sigma):

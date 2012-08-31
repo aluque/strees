@@ -117,7 +117,8 @@ class Tree(object):
         better to keep updating the matrix as the tree grows.
         """
         l = self.lengths(endpoints)
-
+        linv = 1.0 / l
+        
         # We build the matrix in LIL format first, later we convert to a
         # format more efficient for matrix-vector multiplications
         M = lil_matrix((self.n, self.n))
@@ -127,15 +128,13 @@ class Tree(object):
             m = 0.0
             for other in segment.children:
                 j = other.index
-                a = 1.0 / l[j]
-                M[i, j] = a
-                m -= a
+                M[i, j] = linv[j]
+                m -= linv[j]
 
             if segment.parent is not None:
                 j = segment.parent.index
-                a = 1.0 / l[i]
-                M[i, j] = a
-                m -= a                
+                M[i, j] = linv[i]
+                m -= linv[i]     
 
             M[i, i] = m
 

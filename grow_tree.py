@@ -220,7 +220,7 @@ def relax(box, tr, r, q0, t, dt):
 
         return dq
 
-    d = ode(f).set_integrator('vode',  nsteps=50000, rtol=1e-7)
+    d = ode(f).set_integrator('vode',  nsteps=250000, rtol=1e-8)
     d.set_initial_value(q0, 0.0)
     d.integrate(dt)
 
@@ -228,7 +228,7 @@ def relax(box, tr, r, q0, t, dt):
 
 
 def solve_phi(r, q, box=None):
-    if len(q) >= FMM_THRESHOLD:
+    if len(q) >= FMM_THRESHOLD and box is not None:
         # with ContextTimer("FMM") as ct_fmm: 
         box.update_charges(q)
 

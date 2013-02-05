@@ -197,6 +197,32 @@ class Tree(object):
         return dist
 
 
+    def reconnects(self, endpoints, rmin=5e-4, dmin=1e-3):
+        term = array(self.terminals())
+        rterm = endpoints[term, :]
+
+        labels = self.branch_label()
+        lterm = labels[term]
+
+        dist = self.branch_distance(endpoints)
+        dterm = dist[term]
+
+
+        # We look only at node pairs where one of the node is a terminal.
+        r2 = sum((rterm[newaxis, :, :] - endpoints[:, newaxis, :])**2, axis=2)
+        dlabel = lterm[newaxis, :] - labels[:, newaxis]
+
+        # These still include branching events, which are very close but
+        # close to the brnaching points
+        s = logical_and(dlabel != 0, r2 <= rmin**2)
+        t = logical_and(dterm[newaxis, :] > dmin, dist[:, newaxis] > dmin)
+        u = logical_and(s, t)
+
+        i, j = nonzero(u)
+
+        return len(i) > 0
+
+
     def save(self, fname):
         """ Saves the tree structure into file fname. """
         parents = self.parents()

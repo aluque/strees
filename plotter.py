@@ -2,6 +2,7 @@ import sys
 import os, os.path
 from optparse import OptionParser
 from matplotlib.colors import LogNorm
+import matplotlib as mpl
 import scipy.constants as co
 
 from numpy import *
@@ -51,6 +52,7 @@ class Plotter(object):
     def set_ref(self, step):
         self.ref_step = step
         r, q = self.charge_dens(step)
+        rmid, efield = self.inner_field(step)
         
         self.r0, self.r1 = bounding_box(r)
 
@@ -58,6 +60,7 @@ class Plotter(object):
         aqmax = amax(q)
         #self.qmin, self.qmax = -aqmax, aqmax
         self.qmin, self.qmax = amin(q), amax(q)
+        self.emin, self.emax = nanmin(efield), nanmax(efield)
         
 
     def charge_dens(self, step):
@@ -74,7 +77,30 @@ class Plotter(object):
         q = where(isfinite(q), q, 0)
         return r, q / (co.nano / co.centi)
     
-    def plot(self, step):
+
+    def inner_field(self, step):
+        tr, r = datafile.load_tree(self.fp, step)
+        phi = array(self.main[step]['phi'])
+        
+        p = tr.parents()
+        l = tr.lengths(r)
+        midpoints = tr.midpoints(r)
+        t = tr.terminals()
+        self.branches = len(t)
+        # print "%d branches." % len(t)
+        n = len(t)
+
+        p, l, r, phi = p[:-n], l[:-n], r[:-n], phi[:-n]
+        midpoints = midpoints[:-n]
+        
+        phi = phi - dot(r, self.external_field_vector)
+        
+        efields = (phi - phi[p]) / l
+
+        return r, -efields / kV_cm
+
+    
+    def plot(self, step, **kwargs):
         if self.ref_step is None:
             self.set_ref(step)
 
@@ -86,39 +112,25 @@ class Plotter(object):
                          reduce_range=5, dynamic=True,
                          label="Linear charge density [nC/cm]",
                          single=self.single,
-                         axisbg=self.axisbg)
+                         axisbg=self.axisbg, **kwargs)
         # with reduce_range=35, we see the sign everywhere.
 
         savetxt("charge.dat", q)
 
         
     def plot_field(self, step):
-        tr, r = datafile.load_tree(self.fp, step)
-        phi = array(self.main[step]['phi'])
-        
-        p = tr.parents()
-        l = tr.lengths(r)
-        midpoints = tr.midpoints(r)
-        t = tr.terminals()
-        self.branches = len(t)
-        # print "%d branches." % len(t)
-        # As we save now (Tue Jun 12 17:09:04 2012) the latest
-        # points do not have a calculated potential.
-        n = len(phi)
+        if self.ref_step is None:
+            self.set_ref(step)
 
-        p, l, r = p[:n], l[:n], r[:n]
-        midpoints = midpoints[:n]
-        
-        print self.external_field_vector
-        phi = phi - dot(r, self.external_field_vector)
-        
-        efields = (phi - phi[p]) / l
+        midpoints, efield = self.inner_field(step)
+        print self.emin, self.emax
         
         try:
             plot_projections(midpoints / co.centi,
-                             -efields / kV_cm,
+                             efield,
                              self.r0 / co.centi, self.r1 / co.centi,
-                             vmin=None, vmax=None, plot3d=True, log=False,
+                             vmin=self.emin, vmax=self.emax,
+                             plot3d=True, log=False,
                              dynamic=True,
                              label="Electric field, $E$ [kV/cm]",
                              single=self.single,
@@ -195,8 +207,14 @@ def main():
             timestamp = plotter.main[step].attrs['timestamp']
             print "%s\t%f\t%f" % (step, t, timestamp)
 
+    if opts.single:
+        mpl.rcParams['font.size'] = 22.0
+        pylab.figure(figsize=(12.5, 11.5))
+    else:
+        pylab.figure(figsize=(13, 10.5))
 
-    pylab.figure(figsize=(13, 10.5))
+
+
     for i, step in enumerate(steps):
         
         if not opts.field:
@@ -215,11 +233,12 @@ def main():
         
         pylab.savefig(os.path.join(plotter.run_name,
                                    '%s_%s.%s' % (plotter.run_name, step,
-                                                 opts.format)))
+                                                 opts.format)),
+                      dpi=200)
 
 
 
-def bounding_box(r):
+def bounding_box(r, expand_r0=None, expand_r1=None):
     rmin = amin(r, axis=0)
     rmax = amax(r, axis=0)
     
@@ -227,8 +246,14 @@ def bounding_box(r):
     center = 0.5 * (rmax + rmin)
     sides = amax(lengths) * ones((3,))
 
-    r0 = center - sides / 2
-    r1 = center + sides / 2
+    if expand_r0 is None:
+        expand_r0 = array([1, 1, 1])
+
+    if expand_r1 is None:
+        expand_r1 = array([1, 1, 1])
+
+    r0 = center - expand_r0 * sides / 2
+    r1 = center + expand_r1 * sides / 2
 
     return r0, r1
 
@@ -236,16 +261,19 @@ def bounding_box(r):
 def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
                      plot3d=False, dynamic=False, label=None,
                      reduce_range=None, single=False,
-                     axisbg='#404060'):
+                     axisbg='#404060', subplots=True):
     X, Y, Z = 0, 1, 2
+    r0 = r0 * array([1.0, 1.0, 1.1])
+
     names = ["X [cm]", "Y [cm]", "Z [cm]"]
     
     axes = [(X, Z), (Y, Z), (X, Y)]
     if single:
-        axes = [(Y, Z)]
-        
-    pylab.subplots_adjust(left=0.1, wspace=0.35, hspace=0.2,
-                          right=0.85, top=0.95)
+        axes = [(X, Z)]
+    
+    if subplots:
+        pylab.subplots_adjust(left=0.1, wspace=0.35, hspace=0.2,
+                              right=0.85, top=0.95)
     cmap = pylab.get_cmap("jet")
     #cmap = charge_cmap()
     extend = 'neither'
@@ -266,11 +294,14 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
     iplot = [1, 2, 3]
     for i, (d1, d2) in enumerate(axes):
         # For gray use axisbg='#eeefef'
-        if not single:
-            ax = pylab.subplot(2, 2, iplot[i], axisbg=axisbg) # was #404060
+        if subplots:
+            if not single:
+                ax = pylab.subplot(2, 2, iplot[i], axisbg=axisbg) # was #404060
+            else:
+                ax = pylab.subplot(1, 1, 1, axisbg=axisbg) # was #404060
         else:
-            ax = pylab.subplot(1, 1, 1, axisbg=axisbg) # was #404060
-            
+            ax = pylab.gca()
+
         ax.clear()
         ax.grid(ls='-', lw=1.0, c='#c0c0c0', zorder=-20)
         # Thu Aug 23 15:58:10 2012
@@ -279,7 +310,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
         norm = None if not log else LogNorm()
         
         pylab.scatter(r[:, d1], r[:, d2], c=q,
-                      s=19.5, faceted=False, vmin=vmin, vmax=vmax,
+                      s=4*14.5, faceted=False, vmin=vmin, vmax=vmax,
                       cmap=cmap, zorder=20, norm=norm),
         #pylab.colorbar()
         
@@ -289,7 +320,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
         ax.set_xlim([r0[d1], r1[d1]])
         ax.set_ylim([r0[d2], r1[d2]])
 
-    ax = pylab.axes([0.90, 0.1, 0.025, 0.85])
+    ax = pylab.axes([0.88, 0.1, 0.025, 0.85])
     cbar = pylab.colorbar(cax=ax, extend=extend)
     if label is not None:
         cbar.set_label(label)

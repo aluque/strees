@@ -11,6 +11,7 @@ try:
 except ImportError:
     pass
 
+X, Y, Z = 0, 1, 2
 
 def main():
     parser = OptionParser()
@@ -33,26 +34,32 @@ def main():
     eta = main.attrs['conductance']
     mu_T = main.attrs['tip_mobility']
     E0 = main.attrs['external_field']
+    external_field_vector = array([0.0, 0.0, E0])
+
     eps0 = 1 / (4 * pi * main.attrs['maxwell_factor'])
     d = main.attrs['conductor_thickness']
 
-    q0 = eta**2 / (mu_T**2 * E0 * *eps0)
+    q0 = eta**2 / (mu_T**2 * E0 * eps0)
     ell = eta / (mu_T * E0 * eps0)
     tau = ell / (mu_T * E0)
     
     t = zeros((len(steps)),)
     q = zeros((len(steps)),)
     r = zeros((len(steps)),)
+    E = zeros((len(steps)),)
     
     for i, step in enumerate(steps):
         qi = array(main[step]['q'])
         ri = array(main[step]['r'])
+        phi = array(main[step]['phi'])
+        phi = phi - dot(ri, external_field_vector)
 
         t[i] = main[step].attrs['t']
         q[i] = sum(qi)
         r[i] = weighted_r(ri, qi)
-        
-        print "%g\t%g\t%g\t#%s" % (t[i], q[i], r[i], step)
+        E[i] = (phi[1] - phi[0]) / abs(ri[0, Z] - ri[1, Z])
+
+        print "%g\t%g\t%g\t%g\t#%s" % (t[i], q[i], r[i], E[i], step)
 
     if opts.show:
         pylab.xlabel("t")
@@ -61,7 +68,7 @@ def main():
         pylab.show()
 
     if opts.ofile is not None:
-        savetxt(opts.ofile, c_[t, q, r, t / tau, q / q0, r / ell])
+        savetxt(opts.ofile, c_[t, q, r, E, t / tau, q / q0, r / ell])
 
 
 def weighted_r(r, q):

@@ -149,14 +149,17 @@ def expand_dict(d):
         
     
 def expand_input(ifile, parameters):
-    d = load_input(ifile, parameters, d={}, upper=True, raw=True)
+    d = load_input(ifile, parameters, d={}, upper=False, raw=True)
     base = os.path.splitext(ifile)[0]
     
     config = RawConfigParser()
     config.read(ifile)
-    
+    l = []
+
     for i, d0 in enumerate(expand_dict(d)):
-        with open('%s_%.4d.ini' % (base, i), 'w') as fp:
+        fname = '%s_%.4d.ini' % (base, i)
+        l.append(fname)
+        with open(fname, 'w') as fp:
             for k, v in d0.iteritems():
                 for sect in config.sections():
                     try:
@@ -167,6 +170,8 @@ def expand_input(ifile, parameters):
 
             config.write(fp)
     
+    return l
+
 
 def main():
     import sys

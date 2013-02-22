@@ -38,17 +38,18 @@ def submit(ifile, queue, onlyprint=False):
 
 
 def completed(ifile):
+    runid = os.path.splitext(os.path.basename(ifile))[0]
     ipath = os.path.split(os.path.realpath(ifile))[0]
-    ofile = os.path.join(ipath, runid + '.out')
+    ofile = os.path.join(ipath, runid + '.h5')
 
     if not os.path.exists(ofile):
         return False
 
     itime, otime = [os.stat(f).st_mtime for f in ifile, ofile]
-    if itime > otime:
-        return False
+    if otime > itime:
+        return True
 
-    return True
+    return False
 
 
 def main():
@@ -59,7 +60,7 @@ def main():
 
     parser.add_option("--check-completed", "-c", dest="check", 
                       action="store_true",
-                      help="Check for a .out file to see if the code has already run", 
+                      help="Check for a .h5 file to see if the code has already run", 
                       default=False)
 
     parser.add_option("--only-print", "-p", dest="onlyprint", 
@@ -70,8 +71,8 @@ def main():
     (opts, args) = parser.parse_args()
 
     for ifile in args:
-        if opts.check and not completed(ifile):
-            print("Skipping %s due to an existing and newer .out file"
+        if opts.check and completed(ifile):
+            print("Skipping %s due to an existing and newer .h5 file"
                   % ifile)
             continue
 

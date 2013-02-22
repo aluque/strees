@@ -269,7 +269,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
     
     axes = [(X, Z), (Y, Z), (X, Y)]
     if single:
-        axes = [(X, Z)]
+        axes = [(Y, Z)]
     
     if subplots:
         pylab.subplots_adjust(left=0.1, wspace=0.35, hspace=0.2,

@@ -85,6 +85,9 @@ def main():
             dfile.add_step(it, tr, r, q, phi,
                            error=error, error_dq=error_dq)
             
+        if END_WITH_RECONNECTION and tr.reconnects(r):
+            print "Finishing due to a reconnection."
+            break
 
 def init_from_scratch():
     """ Init a 'tree' with a single charge point. """

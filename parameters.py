@@ -134,3 +134,9 @@ def electrode_radius(s):
 def electrode_potential(s):
     """ Electrostatic potential of a (spherical) electrode. """
     return float(s)
+
+
+@default(True)
+def end_with_reconnection(s):
+    """ If true, finishes when a reconnection is detected """
+    return (s.lower() == 'true')

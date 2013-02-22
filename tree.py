@@ -43,7 +43,7 @@ class Tree(object):
 
 
     def make_root(self):
-        """ Creatres a segment node to be root of this tree. """
+        """ Creates a segment node to be root of this tree. """
         root = Segment()
         root.set_tree(self)
         self.root = root
@@ -80,7 +80,7 @@ class Tree(object):
             new_segment = Segment()
             self.segments[i].add_child(new_segment)
             
-        
+
     def zeros(self, dim=None):
         """ Returns an array that can hold all the data needed for a variable
         in this tree's segments.  For multi-dimension data, use dim. """

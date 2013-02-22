@@ -47,7 +47,7 @@ def main():
     ELECTRODE = init_electrode()
     
     # init a tree from scratch
-    tr, r0, q0 = init_from_scratch()
+    tr, r0, q0 = init_from_scratch(INITIAL_NODES)
     
     dt = TIME_STEP
     t = r_[0:END_TIME:dt]
@@ -89,18 +89,22 @@ def main():
             print "Finishing due to a reconnection."
             break
 
-def init_from_scratch():
-    """ Init a 'tree' with a single charge point. """
+def init_from_scratch(n=0):
+    """ Init a 'tree' with the root node plus n additional nodes in a vertical 
+    string. """
     
-
     tr = tree.Tree()
     root = tr.make_root()
+
+    for i in xrange(n):
+        tr.extend([i,])
+
     r0 = tr.zeros(dim=3)
 
-    # tr = tree.random_branching_tree(4, 0.00)
-    # r0 = tree.sample_endpoints(tr) / 1000.0
-
     k = r0.shape[0]
+
+    r0[:, Z] = -arange(k) * CONDUCTOR_THICKNESS
+
     q0 = zeros((k, ))
 
     return tr, r0, q0
@@ -108,6 +112,8 @@ def init_from_scratch():
     
 def step(tr, r, q0, t, dt, p=0.0):
     iterm = tr.terminals()
+    l = tr.lengths(r)[iterm]
+
     box = containing_box(r, electrode=ELECTRODE)
     box.set_charges(r, q0,
                     max_charges=MAX_CHARGES_PER_BOX,
@@ -130,30 +136,40 @@ def step(tr, r, q0, t, dt, p=0.0):
     # 5. Branch some of the tips
     vabs = sqrt(sum(v**2, axis=1))
     does_branch = rand(*iterm.shape) < (p * vabs * dt)
-    
-    ## if t >= 1.30e-7:
-    ##     print "<relaxing only>"
-    ##     return r, q1
+    drabs = vabs * dt
 
-    # print "%d active branches" % len(iterm)
-    
-    radv = empty((sum(does_branch) + len(iterm), 3))
+    # We create new segments only when the separation from their parents
+    # is larger that 0.1 * CONDUCTOR_THICKNESS, hence this filter.
+    # Note that it includes also the died-out channels
+    slow = logical_and(logical_not(does_branch),
+                       drabs < 0.1 * CONDUCTOR_THICKNESS,
+                       logical_not(l > 0.1 * CONDUCTOR_THICKNESS))
+
+    radv = empty((sum(does_branch) + sum(logical_not(slow)), 3))
     j = 0
     
     for i, branches in enumerate(does_branch):
         if not branches:
-            radv[j, :] = r[iterm[i], :] + dt * v[i, :]
-            j += 1
+            if not slow[i]:
+                radv[j, :] = r[iterm[i], :] + dt * v[i, :]
+                j += 1
         else:
+            # Note that slow channels, although unlikely, may branch.
+            # However, not if their velocity is 0
             dr1, dr2 = symmetric_gaussian(dt * v[i, :], BRANCHING_SIGMA)
             radv[j, :] = r[iterm[i], :] + dr1
             radv[j + 1, :] = r[iterm[i], :] + dr2
             j += 2
     
-    rnew = concatenate((r, radv), axis=0)
-    qnew = concatenate((q1, zeros((sum(does_branch) + len(iterm), ))), axis=0)
+    # We update now the slow channels, for wich no additional segment is added
+    r[iterm[slow], :] = r[iterm[slow], :] + dt * v[slow, :]
 
-    tr.extend(sort(r_[iterm, iterm[does_branch]]))
+    rnew = concatenate((r, radv), axis=0)
+    qnew = concatenate((q1, zeros((sum(does_branch) 
+                                   + sum(logical_not(slow)),))), axis=0)
+    
+    tr.extend(sort(r_[iterm[logical_not(slow)], 
+                      iterm[does_branch]]))
     return rnew, qnew
 
 
@@ -175,10 +191,20 @@ def velocities(box, tr, r, q):
     
     box.collect_solutions(field=True)
     sfields = self_fields(tr, r, q)
+    E = (MAXWELL_FACTOR * box.field
+         + MAXWELL_FACTOR * sfields
+         + external_field(r[iterm, :]))
 
-    v = TIP_MOBILITY * (MAXWELL_FACTOR * box.field
-                        + MAXWELL_FACTOR * sfields
-                        + external_field(r[iterm, :]))
+    absE = sqrt(sum(E**2, axis=1))
+
+    # An unit vector with the same direction as E
+    u = E / absE[:, newaxis]
+
+    # Now we can calculate the absolute value of the velocity
+    vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD, absE - TIP_MIN_FIELD, 0)
+
+    v = u * vabs[:, newaxis]
+    
     return v
 
 

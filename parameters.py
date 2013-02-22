@@ -71,6 +71,19 @@ def tip_mobility(s):
     """ Ratio between the tip velocity of each streamer and the local field. """
     return float(s)
 
+@default(0)
+@nonnegative
+def tip_min_field(s):
+    """ Minimum field at the tip for a streamer to propagate. """
+    return float(s)
+
+@default(0)
+@nonnegative
+def initial_nodes(s):
+    """ Starts the simulation with a vertical string with this number of 
+    charged nodes separated a distance CONDUCTOR_THICKNESS. """
+    return int(s)
+
 
 @positive
 def end_time(s):

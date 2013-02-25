@@ -28,6 +28,7 @@ class Plotter(object):
         self.run_name = self.main.attrs['run_name']
         self.external_field = self.main.attrs['external_field']
         self.external_field_vector = array([0.0, 0.0, self.external_field])
+        self.conductor_thickness = self.main.attrs['conductor_thickness']
         self.ref_step = None
 
         self.branches = 0
@@ -72,7 +73,10 @@ class Plotter(object):
         t = tr.terminals()
         n = len(t)
         q, r, l = q[:-n], r[:-n], l[:-n]
-        
+
+        flt = l > 0.1 * self.conductor_thickness
+        q, r, l = q[flt], r[flt, :], l[flt]
+
         q = q / l
         q = where(isfinite(q), q, 0)
         return r, q / (co.nano / co.centi)
@@ -310,7 +314,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
         norm = None if not log else LogNorm()
         
         pylab.scatter(r[:, d1], r[:, d2], c=q,
-                      s=4*14.5, faceted=False, vmin=vmin, vmax=vmax,
+                      s=14.5, faceted=False, vmin=vmin, vmax=vmax,
                       cmap=cmap, zorder=20, norm=norm),
         #pylab.colorbar()
         

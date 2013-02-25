@@ -112,7 +112,6 @@ def init_from_scratch(n=0):
     
 def step(tr, r, q0, t, dt, p=0.0):
     iterm = tr.terminals()
-    l = tr.lengths(r)[iterm]
 
     box = containing_box(r, electrode=ELECTRODE)
     box.set_charges(r, q0,
@@ -136,21 +135,13 @@ def step(tr, r, q0, t, dt, p=0.0):
     # 5. Branch some of the tips
     vabs = sqrt(sum(v**2, axis=1))
     does_branch = rand(*iterm.shape) < (p * vabs * dt)
-    drabs = vabs * dt
 
-    # We create new segments only when the separation from their parents
-    # is larger that 0.1 * CONDUCTOR_THICKNESS, hence this filter.
-    # Note that it includes also the died-out channels
-    slow = logical_and(logical_not(does_branch),
-                       drabs < 0.1 * CONDUCTOR_THICKNESS,
-                       logical_not(l > 0.1 * CONDUCTOR_THICKNESS))
-
-    radv = empty((sum(does_branch) + sum(logical_not(slow)), 3))
+    radv = empty((sum(does_branch) + sum(vabs > 0), 3))
     j = 0
     
     for i, branches in enumerate(does_branch):
         if not branches:
-            if not slow[i]:
+            if vabs[i] > 0:
                 radv[j, :] = r[iterm[i], :] + dt * v[i, :]
                 j += 1
         else:
@@ -161,14 +152,11 @@ def step(tr, r, q0, t, dt, p=0.0):
             radv[j + 1, :] = r[iterm[i], :] + dr2
             j += 2
     
-    # We update now the slow channels, for wich no additional segment is added
-    r[iterm[slow], :] = r[iterm[slow], :] + dt * v[slow, :]
-
     rnew = concatenate((r, radv), axis=0)
     qnew = concatenate((q1, zeros((sum(does_branch) 
-                                   + sum(logical_not(slow)),))), axis=0)
+                                   + sum(vabs > 0),))), axis=0)
     
-    tr.extend(sort(r_[iterm[logical_not(slow)], 
+    tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
     return rnew, qnew
 

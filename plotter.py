@@ -74,7 +74,8 @@ class Plotter(object):
         n = len(t)
         q, r, l = q[:-n], r[:-n], l[:-n]
 
-        flt = l > 0.1 * self.conductor_thickness
+        #flt = l > 0.1 * self.conductor_thickness
+        flt = s_[:]
         q, r, l = q[flt], r[flt, :], l[flt]
 
         q = q / l

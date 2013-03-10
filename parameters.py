@@ -149,6 +149,13 @@ def electrode_potential(s):
     return float(s)
 
 
+@default(1e10)
+def max_step(s):
+    """ Longest step for a channel in dt.  The timestep will be reduced
+    to satisfy this constraint"""
+    return float(s)
+
+
 @default(True)
 def end_with_reconnection(s):
     """ If true, finishes when a reconnection is detected """

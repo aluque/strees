@@ -33,6 +33,9 @@ EXTERNAL_FIELD_VECTOR = None
 ELECTRODE = None
 X, Y, Z = 0, 1, 2
 
+class TooLongTimestep(Exception):
+    pass
+
 def main():
     # Load input parameters from the input file and add the, in allcaps
     # to the global namespace.
@@ -78,7 +81,7 @@ def main():
                     branch_prob = inf
                     branched = True
 
-        r, q = step(tr, r, q, it, dt, p=branch_prob)
+        r, q = adapt_step(tr, r, q, dt, p=branch_prob)
 
         with ContextTimer("saving %d" % i):
             phi = solve_phi(r, q)
@@ -88,6 +91,7 @@ def main():
         if END_WITH_RECONNECTION and tr.reconnects(r):
             print "Finishing due to a reconnection."
             break
+    
 
 def init_from_scratch(n=0):
     """ Init a 'tree' with the root node plus n additional nodes in a vertical 
@@ -110,7 +114,27 @@ def init_from_scratch(n=0):
     return tr, r0, q0
 
     
-def step(tr, r, q0, t, dt, p=0.0):
+def adapt_step(tr, r0, q0, dt, p=0.0):
+    """ Performs a step of duration dt but divides it into sub steps
+    to make sure that the length of a channel is never longer than MAX_STEP.
+    """
+    current_dt = dt
+    r, q = r0, q0
+    remaining_steps = 1
+    while remaining_steps > 0:
+        try:
+            r, q = step(tr, r, q, current_dt, p=p) 
+            remaining_steps -= 1
+        except TooLongTimestep:
+            current_dt /= 2.
+            remaining_steps *= 2
+    return r, q
+
+
+def step(tr, r, q0, dt, p=0.0):
+    """ Performs an elementary step, including relaxation and advancing
+    the channels. """
+
     iterm = tr.terminals()
 
     box = containing_box(r, electrode=ELECTRODE)
@@ -124,7 +148,7 @@ def step(tr, r, q0, t, dt, p=0.0):
     v0 = velocities(box, tr, r, q0)
 
     # 2. Relax the tree from t to t + dt
-    q1 = relax(box, tr, r, q0, t, dt)
+    q1 = relax(box, tr, r, q0, dt)
 
     # 3. Calculate the velocities again at t + dt
     v1 = velocities(box, tr, r, q1)
@@ -134,6 +158,12 @@ def step(tr, r, q0, t, dt, p=0.0):
     
     # 5. Branch some of the tips
     vabs = sqrt(sum(v**2, axis=1))
+
+    # If the longest step is longer than MAX_STEP, raise an exception
+    # telling the calling function to reduce dt.
+    if (max(vabs) * dt) > MAX_STEP:
+        raise TooLongTimestep
+
     does_branch = rand(*iterm.shape) < (p * vabs * dt)
 
     radv = empty((sum(does_branch) + sum(vabs > 0), 3))
@@ -209,7 +239,7 @@ def self_fields(tr, r, q):
     return q[iterm][:, newaxis] * u / CONDUCTOR_THICKNESS**2
 
 
-def relax(box, tr, r, q0, t, dt):
+def relax(box, tr, r, q0, dt):
     """ Relax the conductor tree for a time dt. """
     global latest_phi, error, error_dq
     

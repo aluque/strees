@@ -4,7 +4,7 @@ from optparse import OptionParser
 from matplotlib.colors import LogNorm
 import matplotlib as mpl
 import scipy.constants as co
-
+from scipy.stats import scoreatpercentile
 from numpy import *
 import h5py
 import datafile
@@ -60,7 +60,12 @@ class Plotter(object):
         # Focus only on the positive charges
         aqmax = amax(q)
         #self.qmin, self.qmax = -aqmax, aqmax
-        self.qmin, self.qmax = amin(q), amax(q)
+
+        # To avoid large charges at the end of the channels, we truncate
+        # the colorbar.
+        self.qmin = -15 * scoreatpercentile(-q[q < 0], 50.)
+        self.qmax =  5 * scoreatpercentile(q[q > 0], 50.)
+ 
         self.emin, self.emax = nanmin(efield), nanmax(efield)
         
 
@@ -74,9 +79,8 @@ class Plotter(object):
         n = len(t)
         q, r, l = q[:-n], r[:-n], l[:-n]
 
-        #flt = l > 0.1 * self.conductor_thickness
-        flt = s_[:]
-        q, r, l = q[flt], r[flt, :], l[flt]
+        # flt = l > 0.01 * self.conductor_thickness
+        # q, r, l = q[flt], r[flt, :], l[flt]
 
         q = q / l
         q = where(isfinite(q), q, 0)
@@ -114,7 +118,7 @@ class Plotter(object):
         plot_projections(r / co.centi, q,
                          self.r0 / co.centi, self.r1 / co.centi,
                          vmin=self.qmin, vmax=self.qmax, plot3d=True,
-                         reduce_range=5, dynamic=True,
+                         reduce_range=True, dynamic=True,
                          label="Linear charge density [nC/cm]",
                          single=self.single,
                          axisbg=self.axisbg, **kwargs)
@@ -272,9 +276,9 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
 
     names = ["X [cm]", "Y [cm]", "Z [cm]"]
     
-    axes = [(X, Z), (Y, Z), (X, Y)]
+    axes = [(X, Z, Y), (Y, Z, X), (X, Y, Z)]
     if single:
-        axes = [(Y, Z)]
+        axes = [(Y, Z, X)]
     
     if subplots:
         pylab.subplots_adjust(left=0.1, wspace=0.35, hspace=0.2,
@@ -288,8 +292,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
             vmax = nanmax(q)
 
     if reduce_range is not None:
-        vmin, vmax = vmin, vmax / reduce_range
-        extend = 'max'
+        extend = 'both'
         
     if dynamic:
         cmap = cmaps.get_colormap('bluered', dynamic=True)
@@ -297,7 +300,7 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
     
 
     iplot = [1, 2, 3]
-    for i, (d1, d2) in enumerate(axes):
+    for i, (d1, d2, d3) in enumerate(axes):
         # For gray use axisbg='#eeefef'
         if subplots:
             if not single:
@@ -313,8 +316,10 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
         # I used this and --axisbg='aaaaaa' for the reconnection plot:
         #ax.grid(ls='-', lw=1.0, c='#888888', zorder=-20)
         norm = None if not log else LogNorm()
-        
-        pylab.scatter(r[:, d1], r[:, d2], c=q,
+
+        isort = argsort(r[:, d3])
+
+        pylab.scatter(r[isort, d1], r[isort, d2], c=q[isort],
                       s=14.5, faceted=False, vmin=vmin, vmax=vmax,
                       cmap=cmap, zorder=20, norm=norm),
         #pylab.colorbar()
@@ -332,9 +337,12 @@ def plot_projections(r, q, r0, r1, vmin=None, vmax=None, log=False,
         
     if plot3d and not single:
         ax = pylab.subplot(2, 2, 4, projection='3d')
-        ax.scatter(r[::-1, 0],
-                   r[::-1, 1],
-                   r[::-1, 2], zdir='z', c=q[::-1],
+        
+        isort = argsort(dot(array([-1, 1, 0]), r.T))
+
+        ax.scatter(r[isort, 0],
+                   r[isort, 1],
+                   r[isort, 2], zdir='z', c=q[isort],
                    s=9.5, faceted=False, vmin=vmin, vmax=vmax,
                    cmap=cmap, zorder=20, norm=norm)
 

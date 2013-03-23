@@ -790,6 +790,53 @@ mp_field_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
 }
 
 
+/* Same as mp_direct, but here we calculate the potential in a plane,
+   according to phi = log(r0/r) for the potential of a point separated
+   r from a unit charge.
+
+   We do not use this function in the main tree code.
+*/
+mp_array *
+mp_direct_2d (mp_array *r, mp_array *q, mp_array *reval, double a)
+{
+  int i, j;
+  mp_intp n, m;
+  double q0, x, y, dx, dy, *phi_ptr;
+  mp_array *phi;
+
+  /* This is the number of charges; it is taken from q, so if r is
+     larger, the remaining charges are simply ignored. */
+  n = mp_array_dim (q, 0);
+
+  /* The number of evaluation points: */
+  m = mp_array_dim (reval, 0);
+
+  phi = (mp_array*) PyArray_ZEROS (1, &m, mp_DOUBLE, 0);
+
+  for (j = 0; j < m; j++) {
+    x = * (double*) mp_array_getptr2 (reval, j, X);
+    y = * (double*) mp_array_getptr2 (reval, j, Y);
+    phi_ptr = (double*) mp_array_getptr1 (phi, j);
+
+    *phi_ptr = 0;
+
+    for (i = 0; i < n; i++) {
+      double rn;
+
+      dx = * (double*) mp_array_getptr2 (r, i, X) - x;
+      dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
+      q0 = * (double*) mp_array_getptr1 (q, i);
+     
+      rn = sqrt(dx * dx + dy * dy);
+      if (a > 0 || rn > 0.0) {
+	*phi_ptr += -q0 * log(a / rn);
+      }
+    }
+  }
+
+  return phi;
+}
+
 /*  This is the function that has to be called from outside to initialize 
     the library.   All initialization code comes here. */
 void

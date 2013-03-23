@@ -213,7 +213,7 @@ class Tree(object):
         dlabel = lterm[newaxis, :] - labels[:, newaxis]
 
         # These still include branching events, which are very close but
-        # close to the brnaching points
+        # close to the branching points
         s = logical_and(dlabel != 0, r2 <= rmin**2)
         t = logical_and(dterm[newaxis, :] > dmin, dist[:, newaxis] > dmin)
         u = logical_and(s, t)

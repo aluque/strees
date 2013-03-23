@@ -189,6 +189,49 @@ direct (PyObject *self, PyObject *args)
 }
 
 
+static PyObject *
+direct_2d (PyObject *self, PyObject *args)
+{
+  PyArrayObject *r, *q, *reval, *phi;
+  double a;
+
+  if (!PyArg_ParseTuple(args, "O!O!O!d", 
+			&PyArray_Type, &r,
+			&PyArray_Type, &q,
+			&PyArray_Type, &reval,
+			&a))
+    return NULL;
+
+  if (r->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have dimension 2.");
+     return NULL;
+  }
+
+  if (reval->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have dimension 2.");
+     return NULL;
+  }
+
+  if (r->dimensions[1] != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have shape (N, 2).");
+     return NULL;
+  }
+
+  if (reval->dimensions[1] != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have shape (N, 2).");
+     return NULL;
+  }
+
+  phi = mp_direct_2d (r, q, reval, a);
+
+  return PyArray_Return (phi);
+}
+
+
 /* Shifts a multipolar expansion to a given point. */
 static PyObject *
 field_direct (PyObject *self, PyObject *args)
@@ -358,6 +401,8 @@ static PyMethodDef mpMethods[] = {
      "Shifts a multipolar expansion to a new point"},
     {"direct",  direct, METH_VARARGS,
      "Directly computes the potential created by a set of charges"},
+    {"direct_2d",  direct_2d, METH_VARARGS,
+     "Directly computes the potential created by a set of charges in 2d"},
     {"are_near_neighbours",  are_near_neighbours, METH_VARARGS,
      "Checks if two boxes are near neighbours"},
     {"accum",  accum, METH_VARARGS,

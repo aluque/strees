@@ -58,7 +58,6 @@ def load_tree(file, step):
         # Let's assume that we received an open h5file
         parents = array(file['main/%s/parents' % step])
         r = array(file['main/%s/r' % step])
-        
         tr = Tree.from_parents(parents)
         return tr, r
 

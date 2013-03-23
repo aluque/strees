@@ -21,6 +21,10 @@ def main():
     parser.add_option("--ofile", "-o", dest="ofile", action="store",
                       help="Save to this file", default=None)
 
+    parser.add_option("--endt", "-t", dest="endt", action="store",
+                      type=float,
+                      help="Final time", default=None)
+
     (opts, args) = parser.parse_args()
 
     fname = args[0]
@@ -40,10 +44,13 @@ def main():
             t[i] = main[step].attrs['t']
             r[i] = amax(sqrt(sum(ri**2, axis=1)))
 
-            print "%g\t%g\t#%s" % (t[i], r[i], step)
+            #print "%g\t%g\t#%s" % (t[i], r[i], step)
 
     except KeyError:
         pass
+
+    if opts.endt is not None:
+        t, r = t[t <= endt], r[t <= endt]
 
     dt = t[1] - t[0]
     v = diff(r) / dt

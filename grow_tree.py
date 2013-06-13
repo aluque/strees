@@ -320,10 +320,20 @@ def symmetric_gaussian(dr, sigma):
     if not BRANCH_IN_XZ:
         p, q = sigma * randn(2)
     else:
-        p, q = sigma * randn(), 0.0
+        if FIXED_BRANCHING_ANGLE > 0:
+            p, q = norm(dr) * tan(FIXED_BRANCHING_ANGLE / 2), 0.0
+        else:
+            p, q = sigma * randn(), 0.0
     
     dr1 = dr + (p * e1 + q * e2)
     dr2 = dr - (p * e1 + q * e2)
+
+    if FIXED_BRANCHING_ANGLE > 0:
+        # This is to avoid too long segments at branching points.
+        # Presently I am doing it only here to preserve compatibility
+        # with the algorithm described in the paper as of Sat Mar 23 20:58:46 2013
+        dr1 *= norm(dr) / norm(dr1)
+        dr2 *= norm(dr) / norm(dr2)
 
     return dr1, dr2
 
@@ -336,7 +346,7 @@ def external_field(r):
         but use ELECTRODE_POTENTIAL=0.
      2. ELECTRODE_POTENTIAL != 0, but ELECTRODE_GEOMETRY = 'sphere' and
         EXTERNAL_FIELD = 0.
-    However, we allow the user to soot himself on his foot, so he can
+    However, we allow the user to shoot himself on his foot, so he can
     select any arbitrary combination of these parameters.  Beware.
     """
     field = EXTERNAL_FIELD_VECTOR[newaxis, :]

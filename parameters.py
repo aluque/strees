@@ -126,6 +126,10 @@ def single_branching_z(s):
     """ If nonzero, performs a single branching at the given z. """
     return float(s)
 
+@default(0)
+def fixed_branching_angle(s):
+    """ If nonzero, fixes the angle between sibling branches. """
+    return float(s)
 
 @default(False)
 def branch_in_xz(s):

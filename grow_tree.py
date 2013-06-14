@@ -1,3 +1,15 @@
+""" grow_tree.py is the main module of the code and the one you invoke from
+the command line to start a simulation. 
+
+To start a simulation with parameters read from a file simulation.ini
+simply invoke this module as::
+
+   python grow_tree.py simulation.ini
+
+The output will be written in a file name simulation.h5 with a 
+`HDF5 <http://www.hdfgroup.org/HDF5//>`_ format.
+
+"""
 # NOTES:
 #
 # In this module and in all the rest, the geometrical dimension always
@@ -37,6 +49,9 @@ class TooLongTimestep(Exception):
     pass
 
 def main():
+    """ This is the main function of the code it is the starting point of
+    a simulation. """
+
     # Load input parameters from the input file and add the, in allcaps
     # to the global namespace.
     global EXTERNAL_FIELD_VECTOR, ELECTRODE
@@ -116,7 +131,7 @@ def init_from_scratch(n=0):
     
 def adapt_step(tr, r0, q0, dt, p=0.0):
     """ Performs a step of duration dt but divides it into sub steps
-    to make sure that the length of a channel is never longer than MAX_STEP.
+    to make sure that the length of a channel is never longer than ``MAX_STEP``.
     """
     current_dt = dt
     r, q = r0, q0
@@ -133,7 +148,16 @@ def adapt_step(tr, r0, q0, dt, p=0.0):
 
 def step(tr, r, q0, dt, p=0.0):
     """ Performs an elementary step, including relaxation and advancing
-    the channels. """
+    the channels. 
+
+    Arguments:
+
+      * *tr*: the :class:`tree.Tree` instance containing the tree structure.
+      * *r*: an array containing the node locations.
+      * *q0*: an array containing the charges of the nodes.
+      * *dt*: the time step.
+
+    """
 
     iterm = tr.terminals()
 
@@ -193,7 +217,7 @@ def step(tr, r, q0, dt, p=0.0):
 
 def velocities(box, tr, r, q):
     """ Calculates the electric fields at the tips of the tree and from
-    them obtains the propagation velocities of the "streamers" """
+    them obtains the propagation velocities of the *streamers* """
 
     iterm = tr.terminals()
 
@@ -240,7 +264,15 @@ def self_fields(tr, r, q):
 
 
 def relax(box, tr, r, q0, dt):
-    """ Relax the conductor tree for a time dt. """
+    """ Relax the conductor :class:`tree.Tree` *tr* for a time *dt*. 
+
+    Arguments:
+
+      * *tr*: the :class:`tree.Tree` instance containing the tree structure.
+      * *r*: an array containing the node locations.
+      * *q0*: an array containing the charges of the nodes.
+      * *dt*: the time step.
+    """
     global latest_phi, error, error_dq
     
     #with ContextTimer("re-computing Ohm matrix"):
@@ -339,13 +371,15 @@ def symmetric_gaussian(dr, sigma):
 
 
 def external_field(r):
-    """ Calculates the external field at points r.  This is calculated
-    from EXTERNAL_FIELD and ELECTRODE_POTENTIAL.  As the code stands now
+    """ Calculates the external field at points *r*.  This is calculated
+    from ``EXTERNAL_FIELD`` and ``ELECTRODE_POTENTIAL``.  As the code stands now
     only these two possibilities are physically meaningful:
-     1. Specify EXTERNAL_FIELD with a planar electrode or with no electrode,
-        but use ELECTRODE_POTENTIAL=0.
-     2. ELECTRODE_POTENTIAL != 0, but ELECTRODE_GEOMETRY = 'sphere' and
-        EXTERNAL_FIELD = 0.
+
+     1. Specify ``EXTERNAL_FIELD`` with a planar electrode or with no electrode,
+        but use ``ELECTRODE_POTENTIAL=0``.
+     2. ``ELECTRODE_POTENTIAL != 0``, but ``ELECTRODE_GEOMETRY = 'sphere'`` and
+        ``EXTERNAL_FIELD = 0``.
+
     However, we allow the user to shoot himself on his foot, so he can
     select any arbitrary combination of these parameters.  Beware.
     """
@@ -364,7 +398,7 @@ def external_field(r):
 
 
 def external_potential(r):
-    """ Calculates the external potential at points r.  See above, in
+    """ Calculates the external potential at points *r*.  See above, in
     external_field for the risks here.
     """
     phi = -dot(r, EXTERNAL_FIELD_VECTOR)

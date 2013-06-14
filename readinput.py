@@ -1,5 +1,9 @@
-""" Read an .ini input file.
-    We use python's ConfigParser.
+""" This is an auxiliary module for reading input .ini files.
+It is based on Python's stdlib 
+`ConfigParser <http://docs.python.org/2/library/configparser.html/>`_
+
+This module also provides functionality for setting run sets where
+one or more of the parameters run over a list of values.
 """
 
 import os, os.path, socket
@@ -33,6 +37,7 @@ def guess_type(s):
 
 # These are decorators to check allowed values.
 def positive(func):
+    """ A decorator to constraint the parameter to positive values. """
     def f(s):
         r = func(s)
         if not r >= 0:
@@ -47,6 +52,7 @@ def positive(func):
 
 # These are decorators to check allowed values.
 def nonnegative(func):
+    """ A decorator to constraint the parameter to nonnegative values. """
     def f(s):
         r = func(s)
         if r < 0:
@@ -149,6 +155,8 @@ def expand_dict(d):
         
     
 def expand_input(ifile, parameters):
+    """ Expands an input file by expanding some of its arguments.
+    """
     d = load_input(ifile, parameters, d={}, upper=False, raw=True)
     base = os.path.splitext(ifile)[0]
     

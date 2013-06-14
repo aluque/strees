@@ -1,5 +1,5 @@
 """ This is the parameter description file.  Basically it provides a namespace
-where store a function per input parameter.  Each function receives a string
+where we store a function per input parameter.  Each function receives a string
 and is responsible for converting to the appropriate type, checking for
 allowed values.  The docstring of the function is a description of the
 parameter. """

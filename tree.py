@@ -8,6 +8,9 @@ from scipy.sparse import lil_matrix, csr_matrix
 from numpy import *
 
 class Tree(object):
+    """ Instances of the Tree class contain the topological information
+    of a tree discharge: i.e. they encapsulate the relations between different
+    segments in a tree but not about locations, conductivities etc.."""
     def __init__(self):
         # We must carry a global (tree-level) index to access the parameter
         # data arrays
@@ -17,7 +20,7 @@ class Tree(object):
         
 
     def add_segment(self, segment):
-        """ Adds a segment to this tree.  Returns the index of the segment
+        """ Adds a *segment* to this tree.  Returns the index of the segment
         inside the tree. """
         if self.n == 0:
             self.root = segment
@@ -31,7 +34,7 @@ class Tree(object):
 
     def parents(self, root_index=0):
         """ Builds an array with the indices to each segment's parent.
-        The root segment gets an index root_index. """
+        The root segment gets an index *root_index*. """
         p = zeros((self.n,), dtype='i')
         for i, segment in enumerate(self.segments):
             try:
@@ -74,7 +77,7 @@ class Tree(object):
 
     def extend(self, indices):
         """ Extends the tree adding one children to each segment indexed
-        by indices, in that order.  This is used to extend a propagating tree.
+        by *indices*, in that order.  This is used to extend a propagating tree.
         """
         for i in indices:
             new_segment = Segment()
@@ -83,7 +86,7 @@ class Tree(object):
 
     def zeros(self, dim=None):
         """ Returns an array that can hold all the data needed for a variable
-        in this tree's segments.  For multi-dimension data, use dim. """
+        in this tree's segments.  For multi-dimension data, use *dim*. """
         if dim is None:
             return zeros((self.n,))
 
@@ -93,7 +96,7 @@ class Tree(object):
 
     def lengths(self, endpoints):
         """ Returns an array with the segment lengths of the tree, given
-        an array with the endpoints. """
+        an array with the *endpoints*. """
         
         parents = self.parents()
         
@@ -103,7 +106,7 @@ class Tree(object):
 
     def midpoints(self, endpoints):
         """ Returns an array with the segment midpoints of the tree, given
-        an array with the endpoints. """
+        an array with the *endpoints*. """
 
         parents = self.parents()
         return 0.5 * (endpoints + endpoints[parents, :])
@@ -115,6 +118,11 @@ class Tree(object):
         the potential at the center of each segment and '.' is the dot product.
         This function builds the matrix from scratch.  Usually it is much
         better to keep updating the matrix as the tree grows.
+
+        * *endpoints* must contain an array with the endpoints.
+        * *fix* contains an array with indices of nodes with a fixed charge.
+          usually that means the root node.
+        
         """
         l = self.lengths(endpoints)
         linv = 1.0 / l
@@ -198,6 +206,8 @@ class Tree(object):
 
 
     def reconnects(self, endpoints, rmin=5e-4, dmin=1e-3):
+        """ Finds reconnections in a tree. """
+        
         term = array(self.terminals())
         rterm = endpoints[term, :]
 
@@ -232,6 +242,7 @@ class Tree(object):
 
     @staticmethod
     def loadtxt(fname):
+        """ Loads a tree structure from a txt file [DEBUG]. """
         indices, parents = loadtxt(fname, unpack=True)
 
         return Tree.from_parents(parents)
@@ -259,7 +270,7 @@ class Tree(object):
 
 
 class Segment(object):
-    """ This is class of the segments composing a tree.  """
+    """ This is class of the segments composing a :class:`Tree`.  """
     def __init__(self):
         self.children = []
         self.parent = None
@@ -301,6 +312,7 @@ class Segment(object):
 
         
     def add_child(self, other):
+        """ Adds the :class:`Segment` *other* as a child of this segment. """
         other.set_parent(self)
         self.children.append(other)
 

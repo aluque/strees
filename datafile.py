@@ -1,3 +1,6 @@
+""" This module contains the code to save/retrieve the state of a simulation.
+"""
+
 import sys
 import time
 from contextlib import closing

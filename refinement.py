@@ -1,3 +1,13 @@
+""" This module implement the structure of oct-trees for the implementation
+of the Fast Multipolar Method (FMM). 
+
+. note::
+
+  Most of this code is not used, since we disabled the use of the FMM for
+  the simulations reported in the paper.  However, the simulated tree is
+  embedded in a bounding box defined by a :class:`Box` instance.
+"""
+
 import timeit
 
 from itertools import product

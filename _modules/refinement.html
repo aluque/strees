@@ -1,0 +1,566 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>refinement &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for refinement</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot; This module implement the structure of oct-trees for the implementation</span>
+<span class="sd">of the Fast Multipolar Method (FMM). </span>
+
+<span class="sd">. note::</span>
+
+<span class="sd">  Most of this code is not used, since we disabled the use of the FMM for</span>
+<span class="sd">  the simulations reported in the paper.  However, the simulated tree is</span>
+<span class="sd">  embedded in a bounding box defined by a :class:`Box` instance.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">timeit</span>
+
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
+
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">pylab</span>
+    <span class="kn">from</span> <span class="nn">matplotlib.patches</span> <span class="kn">import</span> <span class="n">Rectangle</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="kn">import</span> <span class="nn">mpolar</span>
+
+<span class="n">INWARD</span><span class="p">,</span> <span class="n">INOUT</span><span class="p">,</span> <span class="n">OUTWARD</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="Box"><a class="viewcode-back" href="../modules.html#refinement.Box">[docs]</a><span class="k">class</span> <span class="nc">Box</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Class of 3d boxes.  Each box can be linked to a set of charges.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r0</span><span class="p">,</span> <span class="n">r1</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">rel_coords</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">electrode</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Initializes a box.  r0 contains the smaller (x, y, z) coordinates</span>
+<span class="sd">        and r1 the largest (x, y, z).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">r0</span> <span class="o">=</span> <span class="n">r0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r1</span> <span class="o">=</span> <span class="n">r1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">r0</span> <span class="o">+</span> <span class="n">r1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">=</span> <span class="p">(</span><span class="n">r1</span> <span class="o">-</span> <span class="n">r0</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">children</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="n">parent</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">outward</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inward</span> <span class="o">=</span> <span class="bp">None</span><span class="p">,</span> <span class="bp">None</span>
+
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">level</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">rel_coords</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">parent</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coords</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coords</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">coords</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">rel_coords</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rf</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">electrode</span> <span class="o">=</span> <span class="n">electrode</span>
+
+    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outward</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inward</span> <span class="o">=</span> <span class="bp">None</span><span class="p">,</span> <span class="bp">None</span>
+
+        <span class="k">if</span> <span class="n">recurse</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+    
+        
+<div class="viewcode-block" id="Box.refine"><a class="viewcode-back" href="../modules.html#refinement.Box.refine">[docs]</a>    <span class="k">def</span> <span class="nf">refine</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Creates the 8 children of the box. &quot;&quot;&quot;</span>
+        
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">ndindex</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="n">r0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r0</span> <span class="o">+</span> <span class="n">array</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">/</span> <span class="mi">2</span>
+            <span class="n">r1</span> <span class="o">=</span> <span class="n">r0</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">/</span> <span class="mi">2</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Box</span><span class="p">(</span><span class="n">r0</span><span class="p">,</span> <span class="n">r1</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                                     <span class="n">rel_coords</span><span class="o">=</span><span class="n">array</span><span class="p">(</span><span class="n">t</span><span class="p">)))</span>
+
+</div>
+<div class="viewcode-block" id="Box.set_charges"><a class="viewcode-back" href="../modules.html#refinement.Box.set_charges">[docs]</a>    <span class="k">def</span> <span class="nf">set_charges</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">max_charges</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">evaluation</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Sets the charges of this box.</span>
+<span class="sd">        If max_charges is not None, refines the box into smaller children</span>
+<span class="sd">        until each leaf box contains no more than max_charges.</span>
+<span class="sd">        If evaluation is true, assumes that the charge points will also</span>
+<span class="sd">        be the evaluation points.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="n">r</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">evaluation</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">phi</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],))</span>
+            
+        <span class="c"># We do the reflection that implements the image charge method after</span>
+        <span class="c"># setting the evaluation points because we are not usually interested</span>
+        <span class="c"># in evaluating &quot;image fields&quot;.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">electrode</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">electrode</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">max_charges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">&gt;</span> <span class="n">max_charges</span>
+            <span class="ow">and</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">min_length</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">refine</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">flt</span> <span class="o">=</span> <span class="n">empty</span><span class="p">([</span><span class="mi">8</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">evaluation</span><span class="p">:</span>
+                <span class="c"># Note that when electrode != None self.q and q are not the same</span>
+                <span class="c"># (the former includes the reflections).  To evaluate only</span>
+                <span class="c"># at self.rv we create a view of the first half of flt.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fltv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flt</span><span class="p">[:,</span> <span class="p">:</span><span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)]</span><span class="o">.</span><span class="n">view</span><span class="p">()</span>
+                
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">flt</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="n">indices</span> <span class="o">==</span> <span class="n">i</span><span class="p">)</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">set_charges</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">flt</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">:],</span>
+                                  <span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">flt</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]],</span>
+                                  <span class="n">max_charges</span><span class="o">=</span><span class="n">max_charges</span><span class="p">,</span>
+                                  <span class="n">evaluation</span><span class="o">=</span><span class="n">evaluation</span><span class="p">)</span>
+                
+</div>
+<div class="viewcode-block" id="Box.update_charges"><a class="viewcode-back" href="../modules.html#refinement.Box.update_charges">[docs]</a>    <span class="k">def</span> <span class="nf">update_charges</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Recursively re-set the charges contained in the box.  This</span>
+<span class="sd">        keeps the refinement oct-tree. &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">electrode</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">q</span> <span class="o">=</span> <span class="n">r_</span><span class="p">[</span><span class="n">q</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">electrode</span><span class="o">.</span><span class="n">images_q</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">)]</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">q</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">update_charges</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">flt</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]])</span>
+
+
+        </div>
+<div class="viewcode-block" id="Box.set_evaluation"><a class="viewcode-back" href="../modules.html#refinement.Box.set_evaluation">[docs]</a>    <span class="k">def</span> <span class="nf">set_evaluation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rv</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Recursively sets the points where the potential will be evaluated.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">rv</span> <span class="o">=</span> <span class="n">rv</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phi</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">rv</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],))</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indices</span><span class="p">(</span><span class="n">rv</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">fltv</span> <span class="o">=</span> <span class="n">empty</span><span class="p">([</span><span class="mi">8</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phi</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fltv</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="n">indices</span> <span class="o">==</span> <span class="n">i</span><span class="p">)</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">set_evaluation</span><span class="p">(</span><span class="n">rv</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">fltv</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">:])</span>
+
+</div>
+<div class="viewcode-block" id="Box.set_field_evaluation"><a class="viewcode-back" href="../modules.html#refinement.Box.set_field_evaluation">[docs]</a>    <span class="k">def</span> <span class="nf">set_field_evaluation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rf</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Recursively sets the points where the fields will be evaluated.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">rf</span> <span class="o">=</span> <span class="n">rf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">field</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">rf</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">3</span><span class="p">))</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indices</span><span class="p">(</span><span class="n">rf</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">fltf</span> <span class="o">=</span> <span class="n">empty</span><span class="p">([</span><span class="mi">8</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rf</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fltf</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="n">indices</span> <span class="o">==</span> <span class="n">i</span><span class="p">)</span>
+            <span class="c">#print self.fltf[i, :]</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fltf</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]):</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">set_field_evaluation</span><span class="p">(</span><span class="n">rf</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">fltf</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">:])</span>
+        
+        </div>
+    <span class="k">def</span> <span class="nf">_indices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Finds the child indices (from 0 to 7) of the points at r. &quot;&quot;&quot;</span>
+        <span class="n">bits</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">r</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">r0</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:])</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:])</span>
+        <span class="n">bits</span> <span class="o">=</span> <span class="n">bits</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s">&#39;i&#39;</span><span class="p">)</span>
+
+        <span class="c"># We do not want to exclude the boundaries with higher values</span>
+        <span class="n">bits</span> <span class="o">=</span>  <span class="n">where</span><span class="p">(</span><span class="n">bits</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">,</span> <span class="n">bits</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">p2</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+        <span class="c"># This is the index of the chid where each charge is sitting</span>
+        <span class="k">return</span> <span class="n">dot</span><span class="p">(</span><span class="n">bits</span><span class="p">,</span> <span class="n">p2</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Box.collect_solutions"><a class="viewcode-back" href="../modules.html#refinement.Box.collect_solutions">[docs]</a>    <span class="k">def</span> <span class="nf">collect_solutions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Collects the solution for each of the box&#39;s children. &quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">collect_solutions</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="n">field</span><span class="p">)</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">phi</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">fltv</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]]</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">phi</span>
+            
+            <span class="k">if</span> <span class="n">field</span> <span class="ow">and</span> <span class="n">child</span><span class="o">.</span><span class="n">rf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="c"># Note that if child contains field evaluation points,</span>
+                <span class="c"># then self do too.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">fltf</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">field</span>
+
+</div>
+<div class="viewcode-block" id="Box.is_near_neighbour"><a class="viewcode-back" href="../modules.html#refinement.Box.is_near_neighbour">[docs]</a>    <span class="k">def</span> <span class="nf">is_near_neighbour</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Checks whether other is a near neighbour of this box.</span>
+<span class="sd">        Note that they must belong to the same oct-tree or the algorithm</span>
+<span class="sd">        fails.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">level</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+
+        <span class="k">return</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">are_near_neighbours</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
+        <span class="c">#absdif = abs(self.coords - other.coords)</span>
+
+        <span class="c"># Note that every box is considered a near-neighbour of herself.</span>
+        <span class="c">#return all(absdif &lt;= 1)</span>
+
+</div>
+    <span class="k">def</span> <span class="nf">is_well_separated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_near_neighbour</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Box.build_lists"><a class="viewcode-back" href="../modules.html#refinement.Box.build_lists">[docs]</a>    <span class="k">def</span> <span class="nf">build_lists</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Builds the lists of near-neighbours and the interaction list</span>
+<span class="sd">        of this box.  Assumes that the near-neighbours are already calculated</span>
+<span class="sd">        up in the tree. &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">interaction_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">neighbours</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">neighbours</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">other</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                    <span class="c"># Here we must count the direct interaction between boxes</span>
+                    <span class="c"># at different levels.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">neighbours</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+                    
+                <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">other</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_well_separated</span><span class="p">(</span><span class="n">child</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">interaction_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="bp">self</span> <span class="o">!=</span> <span class="n">child</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">neighbours</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">recurse</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">build_lists</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Box.expand"><a class="viewcode-back" href="../modules.html#refinement.Box.expand">[docs]</a>    <span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Directly calculates the multipolar expansion of this box</span>
+<span class="sd">        around its center. &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outward</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:],</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">OUTWARD</span><span class="p">)</span>
+        
+
+</div>
+<div class="viewcode-block" id="Box.collect"><a class="viewcode-back" href="../modules.html#refinement.Box.collect">[docs]</a>    <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Collects the multipolar expansions of this box&#39;s children,</span>
+<span class="sd">        translate them to the center and sums them.  &quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ndindex</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)):</span>
+            <span class="n">rshift</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]))</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span> <span class="o">/</span> <span class="mi">2</span>
+            <span class="n">M_child</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="n">rshift</span><span class="p">,</span> <span class="n">OUTWARD</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">outward</span><span class="p">)</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">outward</span> <span class="o">+=</span> <span class="n">M_child</span>
+
+</div>
+<div class="viewcode-block" id="Box.upward"><a class="viewcode-back" href="../modules.html#refinement.Box.upward">[docs]</a>    <span class="k">def</span> <span class="nf">upward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Goes through the oct-tree.  For leaves of the tree, directly</span>
+<span class="sd">        calculates the multipole expansion; for nodes with descendants</span>
+<span class="sd">        calculates the expansion by adding the children&#39;s expansion.</span>
+<span class="sd">        This is called &quot;Upward Pass&quot; in the Greengard papers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c"># Here we build an outward and an inward expansion for each box</span>
+        <span class="c"># that are initially set to zero</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inward</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;complex128&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outward</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;complex128&#39;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">upward</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+
+            </div>
+<div class="viewcode-block" id="Box.collect_inward"><a class="viewcode-back" href="../modules.html#refinement.Box.collect_inward">[docs]</a>    <span class="k">def</span> <span class="nf">collect_inward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Calculates the inward (local) expansions of all boxes in the</span>
+<span class="sd">        interaction list and adds them. &quot;&quot;&quot;</span>
+
+        <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">interaction_list</span><span class="p">:</span>
+            <span class="n">rshift</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">center</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center</span>
+
+            <span class="n">M</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="n">rshift</span><span class="p">,</span> <span class="n">INOUT</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">outward</span><span class="p">)</span>
+            
+            <span class="c"># mpolar.accum(self.inward,</span>
+            <span class="c">#             mpolar.shift(rshift, INOUT, other.outward))</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">inward</span><span class="p">[:,</span> <span class="p">:]</span> <span class="o">+=</span> <span class="n">M</span>
+                
+</div>
+<div class="viewcode-block" id="Box.eval_subtree"><a class="viewcode-back" href="../modules.html#refinement.Box.eval_subtree">[docs]</a>    <span class="k">def</span> <span class="nf">eval_subtree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; DEBUG purposes only. &quot;&quot;&quot;</span>
+        <span class="c">#self.phi += mpolar.eval_array(other.outward,</span>
+        <span class="c">#                              self.r - other.center[:, newaxis],</span>
+        <span class="c">#                              OUTWARD)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">phi</span> <span class="o">+=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">direct</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">eval_subtree</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+        
+        </div>
+<div class="viewcode-block" id="Box.downward"><a class="viewcode-back" href="../modules.html#refinement.Box.downward">[docs]</a>    <span class="k">def</span> <span class="nf">downward</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Performs the &quot;Downward Pass&quot; of the Greengard papers. &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">collect_inward</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="n">rshift</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">center</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">inward</span><span class="p">[:,</span> <span class="p">:]</span> <span class="o">+=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="n">rshift</span><span class="p">,</span> <span class="n">INWARD</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inward</span><span class="p">)</span>
+
+            <span class="n">child</span><span class="o">.</span><span class="n">downward</span><span class="p">()</span>
+        
+</div>
+<div class="viewcode-block" id="Box.solve"><a class="viewcode-back" href="../modules.html#refinement.Box.solve">[docs]</a>    <span class="k">def</span> <span class="nf">solve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Once we have the local expansion for the box and the list</span>
+<span class="sd">        of near-neighbours, we can finally evaluate the potential.</span>
+<span class="sd">        Note that generally this function is called only for leaf nodes. &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">phi</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">eval_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inward</span><span class="p">,</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">rv</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:],</span>
+                                        <span class="n">INWARD</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbours</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">phi</span> <span class="o">+=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">direct</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rv</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+
+
+        <span class="k">if</span> <span class="n">field</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">rf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">[:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">eval_field_array</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">inward</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rf</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:],</span>
+                <span class="n">INWARD</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">neighbours</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">field</span> <span class="o">+=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">field_direct</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rf</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Box.solve_all"><a class="viewcode-back" href="../modules.html#refinement.Box.solve_all">[docs]</a>    <span class="k">def</span> <span class="nf">solve_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Calls solve for the leaf nodes of the sub-tree rooted at self. &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">solve_all</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+</div>
+    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">recurse</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">r0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r0</span><span class="p">[</span><span class="n">dims</span><span class="p">]</span>
+        <span class="n">r1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">r1</span><span class="p">[</span><span class="n">dims</span><span class="p">]</span>
+        <span class="n">lx</span><span class="p">,</span> <span class="n">ly</span> <span class="o">=</span> <span class="n">r1</span> <span class="o">-</span> <span class="n">r0</span>
+        
+        <span class="n">rect</span> <span class="o">=</span> <span class="n">Rectangle</span><span class="p">(</span><span class="n">r0</span><span class="p">,</span> <span class="n">lx</span><span class="p">,</span> <span class="n">ly</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">pylab</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">rect</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">recurse</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">dims</span><span class="o">=</span><span class="n">dims</span><span class="p">,</span> <span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">scatter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phi</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rv</span><span class="p">[:,</span> <span class="n">dims</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rv</span><span class="p">[:,</span> <span class="n">dims</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="n">pylab</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">phi</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+
+    <span class="k">def</span> <span class="nf">scatter_leafs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">child</span><span class="o">.</span><span class="n">scatter_leafs</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c">#return str(self.coords)</span>
+        <span class="k">return</span> <span class="s">&quot;(</span><span class="si">%s</span><span class="s">)@</span><span class="si">%d</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coords</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">level</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="containing_box"><a class="viewcode-back" href="../modules.html#refinement.containing_box">[docs]</a><span class="k">def</span> <span class="nf">containing_box</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">electrode</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Builds a Box object that contains all k points in r[3, k].</span>
+<span class="sd">    The Box has to be a perfect cube for the FMM to work.</span>
+<span class="sd">    If reflect is True, inludes also the reflection of all points</span>
+<span class="sd">    over the z=0 plane.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">electrode</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">concatenate</span><span class="p">((</span><span class="n">r</span><span class="p">,</span> <span class="n">electrode</span><span class="o">.</span><span class="n">images_r</span><span class="p">(</span><span class="n">r</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        
+    <span class="n">rmin</span> <span class="o">=</span> <span class="n">amin</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">rmax</span> <span class="o">=</span> <span class="n">amax</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="n">lengths</span> <span class="o">=</span> <span class="n">rmax</span> <span class="o">-</span> <span class="n">rmin</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">rmax</span> <span class="o">+</span> <span class="n">rmin</span><span class="p">)</span>
+    <span class="n">sides</span> <span class="o">=</span> <span class="n">amax</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span> <span class="o">*</span> <span class="n">ones</span><span class="p">((</span><span class="mi">3</span><span class="p">,))</span>
+
+    <span class="n">r0</span> <span class="o">=</span> <span class="n">center</span> <span class="o">-</span> <span class="n">sides</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">r1</span> <span class="o">=</span> <span class="n">center</span> <span class="o">+</span> <span class="n">sides</span> <span class="o">/</span> <span class="mi">2</span>
+    
+    <span class="k">return</span> <span class="n">Box</span><span class="p">(</span><span class="n">r0</span><span class="p">,</span> <span class="n">r1</span><span class="p">,</span> <span class="n">electrode</span><span class="o">=</span><span class="n">electrode</span><span class="p">)</span>
+
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">k</span> <span class="o">=</span> <span class="mi">1200</span>
+    
+    <span class="n">r</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>
+
+    <span class="c"># Let&#39;s make things simpler</span>
+    <span class="c">#r[2, :] = pi / 5</span>
+    <span class="n">q</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    
+    <span class="n">r0</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">])</span>
+    <span class="n">r1</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+
+
+    <span class="c">#pylab.plot(r[0, :], r[1, :], &#39;o&#39;, mfc=&#39;k&#39;, mec=&#39;k&#39;)</span>
+    
+    <span class="n">box</span> <span class="o">=</span> <span class="n">Box</span><span class="p">(</span><span class="n">r0</span><span class="p">,</span> <span class="n">r1</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="n">pylab</span><span class="o">.</span><span class="n">xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+    <span class="n">box</span><span class="o">.</span><span class="n">set_charges</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">max_charges</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">build_lists</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">upward</span><span class="p">(</span><span class="mi">15</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">downward</span><span class="p">()</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">solve_all</span><span class="p">()</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">collect_solutions</span><span class="p">()</span>
+
+    <span class="n">phi</span> <span class="o">=</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">direct</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+    <span class="n">box</span><span class="o">.</span><span class="n">scatter_leafs</span><span class="p">(</span><span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">1200</span><span class="p">)</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+
+    <span class="c"># Let&#39;s compare with the exact solution</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="n">pylab</span><span class="o">.</span><span class="n">xlim</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">ylim</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+
+    <span class="n">pylab</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">r</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">r</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                  <span class="n">c</span><span class="o">=</span><span class="n">phi</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">1200</span><span class="p">)</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">colorbar</span><span class="p">()</span>
+
+    <span class="n">err</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">((</span><span class="n">phi</span> <span class="o">-</span> <span class="n">box</span><span class="o">.</span><span class="n">phi</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span> <span class="o">/</span> <span class="n">k</span>
+    <span class="n">savetxt</span><span class="p">(</span><span class="s">&quot;cmp.txt&quot;</span><span class="p">,</span> <span class="n">c_</span><span class="p">[</span><span class="n">phi</span><span class="p">,</span> <span class="n">box</span><span class="o">.</span><span class="n">phi</span><span class="p">])</span>
+    
+    <span class="k">print</span> <span class="s">&quot;Error = </span><span class="si">%g</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">err</span>
+    
+    <span class="n">pylab</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    
+    
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

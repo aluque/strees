@@ -1,0 +1,292 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>readinput &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for readinput</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot; This is an auxiliary module for reading input .ini files.</span>
+<span class="sd">It is based on Python&#39;s stdlib </span>
+<span class="sd">`ConfigParser &lt;http://docs.python.org/2/library/configparser.html/&gt;`_</span>
+
+<span class="sd">This module also provides functionality for setting run sets where</span>
+<span class="sd">one or more of the parameters run over a list of values.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">os.path</span><span class="o">,</span> <span class="nn">socket</span>
+<span class="kn">from</span> <span class="nn">ConfigParser</span> <span class="kn">import</span> <span class="n">SafeConfigParser</span><span class="p">,</span> <span class="n">RawConfigParser</span><span class="p">,</span> <span class="n">NoOptionError</span>
+<span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">product</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span>
+
+<div class="viewcode-block" id="guess_type"><a class="viewcode-back" href="../modules.html#readinput.guess_type">[docs]</a><span class="k">def</span> <span class="nf">guess_type</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Converts s into int or float if possible.  If not, leave it as a</span>
+<span class="sd">    string. This will give us problems if the user wants to e.g. use</span>
+<span class="sd">    filenames or run names that can be parser as a number.  So have to</span>
+<span class="sd">    implement a better approach whereby parameter names are associated with</span>
+<span class="sd">    types.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">s</span>
+
+
+<span class="c"># These are decorators to check allowed values.</span></div>
+<div class="viewcode-block" id="positive"><a class="viewcode-back" href="../modules.html#readinput.positive">[docs]</a><span class="k">def</span> <span class="nf">positive</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; A decorator to constraint the parameter to positive values. &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">r</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> must be positive&quot;</span> <span class="o">%</span> <span class="n">func</span><span class="o">.</span><span class="n">func_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span>
+    
+    <span class="n">f</span><span class="o">.</span><span class="n">__doc__</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">__doc__</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">func_name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">func_name</span>
+
+    <span class="k">return</span> <span class="n">f</span>
+
+
+<span class="c"># These are decorators to check allowed values.</span></div>
+<div class="viewcode-block" id="nonnegative"><a class="viewcode-back" href="../modules.html#readinput.nonnegative">[docs]</a><span class="k">def</span> <span class="nf">nonnegative</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; A decorator to constraint the parameter to nonnegative values. &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> must be positive&quot;</span> <span class="o">%</span> <span class="n">func</span><span class="o">.</span><span class="n">func_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r</span>
+    
+    <span class="n">f</span><span class="o">.</span><span class="n">__doc__</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">__doc__</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">func_name</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">func_name</span>
+
+    <span class="k">return</span> <span class="n">f</span>
+
+<span class="c"># A decorator to set a default value, stored in the dictionary PARAM_DEFAULTS</span></div>
+<span class="n">PARAM_DEFAULTS</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">def</span> <span class="nf">default</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">deco</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="k">global</span> <span class="n">PARAM_DEFAULTS</span>
+        <span class="n">PARAM_DEFAULTS</span><span class="p">[</span><span class="n">func</span><span class="o">.</span><span class="n">func_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">func</span>
+
+    <span class="k">return</span> <span class="n">deco</span>
+
+
+<div class="viewcode-block" id="load_input"><a class="viewcode-back" href="../modules.html#readinput.load_input">[docs]</a><span class="k">def</span> <span class="nf">load_input</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">d</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">upper</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Loads an input file and stores its values in the dictionary</span>
+<span class="sd">    d.   If upper is true, transforms the parameter names to upper case. &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">d</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    
+    <span class="n">config</span> <span class="o">=</span> <span class="n">SafeConfigParser</span><span class="p">()</span>
+    <span class="n">defaults</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">home</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;HOME&#39;</span><span class="p">],</span>
+                    <span class="n">user</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s">&#39;LOGNAME&#39;</span><span class="p">],</span>
+                    <span class="n">cwd</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">(),</span>
+                    <span class="nb">input</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">fname</span><span class="p">))[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">input_dir</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">fname</span><span class="p">))[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">hostname</span><span class="o">=</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">())</span>
+                    
+    <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;global&#39;</span><span class="p">,</span> <span class="s">&#39;parameters&#39;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">section</span><span class="p">,</span> <span class="nb">vars</span><span class="o">=</span><span class="n">defaults</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="n">raw</span><span class="p">):</span>
+            <span class="k">print</span> <span class="n">name</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">expand</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s">&quot;</span><span class="si">%-30s</span><span class="s"> =</span><span class="se">\t</span><span class="si">%-10s</span><span class="s"> [</span><span class="si">%s</span><span class="s">]&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">func</span><span class="o">.</span><span class="n">__doc__</span><span class="p">)</span>
+                
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="n">warn</span><span class="p">(</span><span class="s">&quot;&#39;</span><span class="si">%s</span><span class="s">&#39; is not defined as a parameter.&quot;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">guess_type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">upper</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+
+            <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">PARAM_DEFAULTS</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">r</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">r</span>
+
+</div>
+<span class="n">RE_LIST</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">r&#39;@\((.+)\)&#39;</span><span class="p">)</span>
+<span class="n">RE_LOOP</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">r&#39;@@\(([\d.-]+):([\d.-]+)(:([\d.-]+))?\)&#39;</span><span class="p">)</span>
+<div class="viewcode-block" id="expand"><a class="viewcode-back" href="../modules.html#readinput.expand">[docs]</a><span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">parser</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Expands special characters to produce e.g. lists of many parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># All expansions start with the symbol &#39;@&#39;:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="s">&#39;@&#39;</span> <span class="ow">in</span> <span class="n">s</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">parser</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+    <span class="n">m</span> <span class="o">=</span> <span class="n">RE_LIST</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">m</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">parser</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()]</span>
+
+    <span class="n">m</span> <span class="o">=</span> <span class="n">RE_LOOP</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">m</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">parser</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">parser</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="n">parser</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">parser</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">parser</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)),</span> <span class="bp">None</span>            
+        <span class="n">r</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+        <span class="k">print</span> <span class="n">r</span>
+        <span class="k">print</span> <span class="p">[</span><span class="n">parser</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">r</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">parser</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">))</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">r</span><span class="p">]</span>
+
+
+</div>
+<div class="viewcode-block" id="expand_dict"><a class="viewcode-back" href="../modules.html#readinput.expand_dict">[docs]</a><span class="k">def</span> <span class="nf">expand_dict</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Takes a dictionary that may contain a few lists as values and returns</span>
+<span class="sd">    an iterator over dictionaries where each of these elements is iterated. &quot;&quot;&quot;</span>
+
+    <span class="n">keys</span><span class="p">,</span> <span class="n">lists</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">)])</span>
+    <span class="k">for</span> <span class="n">tpl</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="n">lists</span><span class="p">):</span>
+        <span class="n">d0</span> <span class="o">=</span> <span class="n">d</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">tpl</span><span class="p">):</span>
+            <span class="n">d0</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+
+        <span class="k">yield</span> <span class="n">d0</span>
+        
+    </div>
+<div class="viewcode-block" id="expand_input"><a class="viewcode-back" href="../modules.html#readinput.expand_input">[docs]</a><span class="k">def</span> <span class="nf">expand_input</span><span class="p">(</span><span class="n">ifile</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Expands an input file by expanding some of its arguments.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">load_input</span><span class="p">(</span><span class="n">ifile</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">d</span><span class="o">=</span><span class="p">{},</span> <span class="n">upper</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">ifile</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="n">config</span> <span class="o">=</span> <span class="n">RawConfigParser</span><span class="p">()</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ifile</span><span class="p">)</span>
+    <span class="n">l</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">d0</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">expand_dict</span><span class="p">(</span><span class="n">d</span><span class="p">)):</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">_</span><span class="si">%.4d</span><span class="s">.ini&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+        <span class="n">l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fp</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d0</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">sect</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">sections</span><span class="p">():</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">old</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sect</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+                        <span class="n">config</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">sect</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">NoOptionError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+
+            <span class="n">config</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">fp</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">l</span>
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="kn">import</span> <span class="nn">sys</span>
+    <span class="kn">import</span> <span class="nn">parameters</span>
+    
+    <span class="n">expand_input</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">parameters</span><span class="p">)</span>
+
+    <span class="c"># d = load_input(sys.argv[1], parameters, d={}, upper=True)</span>
+    <span class="c"># for d0 in expand_dict(d):</span>
+    <span class="c">#     print d0</span>
+    
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

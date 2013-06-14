@@ -1,0 +1,561 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>grow_tree &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for grow_tree</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot; grow_tree.py is the main module of the code and the one you invoke from</span>
+<span class="sd">the command line to start a simulation. </span>
+
+<span class="sd">To start a simulation with parameters read from a file simulation.ini</span>
+<span class="sd">simply invoke this module as::</span>
+
+<span class="sd">   python grow_tree.py simulation.ini</span>
+
+<span class="sd">The output will be written in a file name simulation.h5 with a </span>
+<span class="sd">`HDF5 &lt;http://www.hdfgroup.org/HDF5//&gt;`_ format.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c"># NOTES:</span>
+<span class="c">#</span>
+<span class="c"># In this module and in all the rest, the geometrical dimension always</span>
+<span class="c"># corresponds to the last axis of an array.  For example to save the locations</span>
+<span class="c"># of k points we use an array with shape [k, 3].</span>
+<span class="c">#</span>
+<span class="c"># All-caps variable names are in general global variables that are read</span>
+<span class="c"># from the input file.  We use globals().update(...) so they are avaliable</span>
+<span class="c"># everywhere.</span>
+<span class="c">#</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">numpy.random</span> <span class="kn">import</span> <span class="n">rand</span><span class="p">,</span> <span class="n">randn</span><span class="p">,</span> <span class="n">seed</span>
+<span class="kn">from</span> <span class="nn">numpy.linalg</span> <span class="kn">import</span> <span class="n">norm</span>
+<span class="kn">from</span> <span class="nn">scipy.integrate</span> <span class="kn">import</span> <span class="n">odeint</span><span class="p">,</span> <span class="n">ode</span>
+
+<span class="kn">from</span> <span class="nn">readinput</span> <span class="kn">import</span> <span class="n">load_input</span>
+<span class="kn">import</span> <span class="nn">tree</span>
+<span class="kn">from</span> <span class="nn">refinement</span> <span class="kn">import</span> <span class="n">Box</span><span class="p">,</span> <span class="n">containing_box</span>
+<span class="kn">import</span> <span class="nn">mpolar</span>
+<span class="kn">from</span> <span class="nn">datafile</span> <span class="kn">import</span> <span class="n">DataFile</span>
+<span class="kn">import</span> <span class="nn">os.path</span>
+<span class="kn">from</span> <span class="nn">angles</span> <span class="kn">import</span> <span class="n">branching_angles</span>
+<span class="kn">import</span> <span class="nn">parameters</span> <span class="kn">as</span> <span class="nn">param_descriptors</span>
+<span class="kn">import</span> <span class="nn">electrodes</span>
+<span class="kn">from</span> <span class="nn">contexttimer</span> <span class="kn">import</span> <span class="n">ContextTimer</span>
+
+<span class="n">latest_phi</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">EXTERNAL_FIELD_VECTOR</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">ELECTRODE</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span>
+
+<span class="k">class</span> <span class="nc">TooLongTimestep</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../modules.html#grow_tree.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot; This is the main function of the code it is the starting point of</span>
+<span class="sd">    a simulation. &quot;&quot;&quot;</span>
+
+    <span class="c"># Load input parameters from the input file and add the, in allcaps</span>
+    <span class="c"># to the global namespace.</span>
+    <span class="k">global</span> <span class="n">EXTERNAL_FIELD_VECTOR</span><span class="p">,</span> <span class="n">ELECTRODE</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="n">load_input</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">param_descriptors</span><span class="p">)</span>
+    <span class="nb">globals</span><span class="p">()</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">((</span><span class="n">key</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">item</span><span class="p">)</span>
+                          <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()))</span>
+    <span class="k">if</span> <span class="n">RANDOM_SEED</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">seed</span><span class="p">(</span><span class="n">RANDOM_SEED</span><span class="p">)</span>
+    
+    <span class="n">EXTERNAL_FIELD_VECTOR</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">EXTERNAL_FIELD</span><span class="p">])</span>
+    <span class="n">ELECTRODE</span> <span class="o">=</span> <span class="n">init_electrode</span><span class="p">()</span>
+    
+    <span class="c"># init a tree from scratch</span>
+    <span class="n">tr</span><span class="p">,</span> <span class="n">r0</span><span class="p">,</span> <span class="n">q0</span> <span class="o">=</span> <span class="n">init_from_scratch</span><span class="p">(</span><span class="n">INITIAL_NODES</span><span class="p">)</span>
+    
+    <span class="n">dt</span> <span class="o">=</span> <span class="n">TIME_STEP</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">r_</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">END_TIME</span><span class="p">:</span><span class="n">dt</span><span class="p">]</span>
+    
+    <span class="n">r</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">r0</span><span class="p">,</span> <span class="n">q0</span>
+
+    <span class="n">dfile</span> <span class="o">=</span> <span class="n">DataFile</span><span class="p">(</span><span class="n">OUT_FILE</span><span class="p">,</span> <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">)</span>
+    <span class="n">branched</span> <span class="o">=</span> <span class="bp">False</span>
+    
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+        <span class="c"># with ContextTimer(&quot;plotting&quot;):</span>
+        <span class="c">#     plot_projections(r, q)</span>
+        <span class="c">#     pylab.savefig(&#39;tree_%.3d.png&#39; % i)</span>
+        <span class="c"># print &#39;t = %g\ttree_%.3d.png&#39; % (it, i)</span>
+        <span class="k">print</span> <span class="s">&quot;</span><span class="si">%d</span><span class="s">/</span><span class="si">%d</span><span class="s">  t = </span><span class="si">%g</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="n">it</span><span class="p">)</span>
+        <span class="n">branch_prob</span> <span class="o">=</span> <span class="n">BRANCHING_PROBABILITY</span>
+
+        <span class="k">if</span> <span class="n">SINGLE_BRANCHING_TIME</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">it</span> <span class="o">&gt;</span> <span class="n">SINGLE_BRANCHING_TIME</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">branched</span><span class="p">:</span>
+                    <span class="n">branch_prob</span> <span class="o">=</span> <span class="n">inf</span>
+                    <span class="n">branched</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="k">if</span> <span class="n">SINGLE_BRANCHING_Z</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">branched</span><span class="p">:</span>
+            <span class="n">zterm</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">tr</span><span class="o">.</span><span class="n">terminals</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="n">Z</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">zterm</span> <span class="o">&lt;</span> <span class="n">SINGLE_BRANCHING_Z</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">branched</span><span class="p">:</span>
+                    <span class="n">branch_prob</span> <span class="o">=</span> <span class="n">inf</span>
+                    <span class="n">branched</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="n">r</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">adapt_step</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">branch_prob</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">ContextTimer</span><span class="p">(</span><span class="s">&quot;saving </span><span class="si">%d</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">i</span><span class="p">):</span>
+            <span class="n">phi</span> <span class="o">=</span> <span class="n">solve_phi</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+            <span class="n">dfile</span><span class="o">.</span><span class="n">add_step</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">phi</span><span class="p">,</span>
+                           <span class="n">error</span><span class="o">=</span><span class="n">error</span><span class="p">,</span> <span class="n">error_dq</span><span class="o">=</span><span class="n">error_dq</span><span class="p">)</span>
+            
+        <span class="k">if</span> <span class="n">END_WITH_RECONNECTION</span> <span class="ow">and</span> <span class="n">tr</span><span class="o">.</span><span class="n">reconnects</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s">&quot;Finishing due to a reconnection.&quot;</span>
+            <span class="k">break</span>
+    
+</div>
+<div class="viewcode-block" id="init_from_scratch"><a class="viewcode-back" href="../modules.html#grow_tree.init_from_scratch">[docs]</a><span class="k">def</span> <span class="nf">init_from_scratch</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Init a &#39;tree&#39; with the root node plus n additional nodes in a vertical </span>
+<span class="sd">    string. &quot;&quot;&quot;</span>
+    
+    <span class="n">tr</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">Tree</span><span class="p">()</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">make_root</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="n">tr</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">i</span><span class="p">,])</span>
+
+    <span class="n">r0</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+    <span class="n">k</span> <span class="o">=</span> <span class="n">r0</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">r0</span><span class="p">[:,</span> <span class="n">Z</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">arange</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="n">CONDUCTOR_THICKNESS</span>
+
+    <span class="n">q0</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r0</span><span class="p">,</span> <span class="n">q0</span>
+
+    </div>
+<div class="viewcode-block" id="adapt_step"><a class="viewcode-back" href="../modules.html#grow_tree.adapt_step">[docs]</a><span class="k">def</span> <span class="nf">adapt_step</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r0</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Performs a step of duration dt but divides it into sub steps</span>
+<span class="sd">    to make sure that the length of a channel is never longer than ``MAX_STEP``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">current_dt</span> <span class="o">=</span> <span class="n">dt</span>
+    <span class="n">r</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">r0</span><span class="p">,</span> <span class="n">q0</span>
+    <span class="n">remaining_steps</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">while</span> <span class="n">remaining_steps</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">r</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">step</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">current_dt</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">)</span> 
+            <span class="n">remaining_steps</span> <span class="o">-=</span> <span class="mi">1</span>
+        <span class="k">except</span> <span class="n">TooLongTimestep</span><span class="p">:</span>
+            <span class="n">current_dt</span> <span class="o">/=</span> <span class="mf">2.</span>
+            <span class="n">remaining_steps</span> <span class="o">*=</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span>
+
+</div>
+<div class="viewcode-block" id="step"><a class="viewcode-back" href="../modules.html#grow_tree.step">[docs]</a><span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Performs an elementary step, including relaxation and advancing</span>
+<span class="sd">    the channels. </span>
+
+<span class="sd">    Arguments:</span>
+
+<span class="sd">      * *tr*: the :class:`tree.Tree` instance containing the tree structure.</span>
+<span class="sd">      * *r*: an array containing the node locations.</span>
+<span class="sd">      * *q0*: an array containing the charges of the nodes.</span>
+<span class="sd">      * *dt*: the time step.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">iterm</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">terminals</span><span class="p">()</span>
+
+    <span class="n">box</span> <span class="o">=</span> <span class="n">containing_box</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">electrode</span><span class="o">=</span><span class="n">ELECTRODE</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">set_charges</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span>
+                    <span class="n">max_charges</span><span class="o">=</span><span class="n">MAX_CHARGES_PER_BOX</span><span class="p">,</span>
+                    <span class="n">min_length</span><span class="o">=</span><span class="mi">16</span> <span class="o">*</span> <span class="n">CONDUCTOR_THICKNESS</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">build_lists</span><span class="p">(</span><span class="n">recurse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">set_field_evaluation</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">,</span> <span class="p">:])</span>
+
+    <span class="c"># 1. Calculate the velocities at t</span>
+    <span class="n">v0</span> <span class="o">=</span> <span class="n">velocities</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q0</span><span class="p">)</span>
+
+    <span class="c"># 2. Relax the tree from t to t + dt</span>
+    <span class="n">q1</span> <span class="o">=</span> <span class="n">relax</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">dt</span><span class="p">)</span>
+
+    <span class="c"># 3. Calculate the velocities again at t + dt</span>
+    <span class="n">v1</span> <span class="o">=</span> <span class="n">velocities</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span>
+
+    <span class="c"># 4. Extend the tree with the leap-frog algo.</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">v0</span> <span class="o">+</span> <span class="n">v1</span><span class="p">)</span>
+    
+    <span class="c"># 5. Branch some of the tips</span>
+    <span class="n">vabs</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">v</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="c"># If the longest step is longer than MAX_STEP, raise an exception</span>
+    <span class="c"># telling the calling function to reduce dt.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">vabs</span><span class="p">)</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MAX_STEP</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">TooLongTimestep</span>
+
+    <span class="n">does_branch</span> <span class="o">=</span> <span class="n">rand</span><span class="p">(</span><span class="o">*</span><span class="n">iterm</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">p</span> <span class="o">*</span> <span class="n">vabs</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span>
+
+    <span class="n">radv</span> <span class="o">=</span> <span class="n">empty</span><span class="p">((</span><span class="nb">sum</span><span class="p">(</span><span class="n">does_branch</span><span class="p">)</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span><span class="n">vabs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">branches</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">does_branch</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">branches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">vabs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">radv</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">:]</span> <span class="o">+</span> <span class="n">dt</span> <span class="o">*</span> <span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span>
+                <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># Note that slow channels, although unlikely, may branch.</span>
+            <span class="c"># However, not if their velocity is 0</span>
+            <span class="n">dr1</span><span class="p">,</span> <span class="n">dr2</span> <span class="o">=</span> <span class="n">symmetric_gaussian</span><span class="p">(</span><span class="n">dt</span> <span class="o">*</span> <span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="n">BRANCHING_SIGMA</span><span class="p">)</span>
+            <span class="n">radv</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">:]</span> <span class="o">+</span> <span class="n">dr1</span>
+            <span class="n">radv</span><span class="p">[</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="p">:]</span> <span class="o">+</span> <span class="n">dr2</span>
+            <span class="n">j</span> <span class="o">+=</span> <span class="mi">2</span>
+    
+    <span class="n">rnew</span> <span class="o">=</span> <span class="n">concatenate</span><span class="p">((</span><span class="n">r</span><span class="p">,</span> <span class="n">radv</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">qnew</span> <span class="o">=</span> <span class="n">concatenate</span><span class="p">((</span><span class="n">q1</span><span class="p">,</span> <span class="n">zeros</span><span class="p">((</span><span class="nb">sum</span><span class="p">(</span><span class="n">does_branch</span><span class="p">)</span> 
+                                   <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span><span class="n">vabs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">),))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="n">tr</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">sort</span><span class="p">(</span><span class="n">r_</span><span class="p">[</span><span class="n">iterm</span><span class="p">[</span><span class="n">vabs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">],</span> 
+                      <span class="n">iterm</span><span class="p">[</span><span class="n">does_branch</span><span class="p">]]))</span>
+    <span class="k">return</span> <span class="n">rnew</span><span class="p">,</span> <span class="n">qnew</span>
+
+</div>
+<div class="viewcode-block" id="velocities"><a class="viewcode-back" href="../modules.html#grow_tree.velocities">[docs]</a><span class="k">def</span> <span class="nf">velocities</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Calculates the electric fields at the tips of the tree and from</span>
+<span class="sd">    them obtains the propagation velocities of the *streamers* &quot;&quot;&quot;</span>
+
+    <span class="n">iterm</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">terminals</span><span class="p">()</span>
+
+    <span class="c"># When we have a single charge the velocity is simply given by the</span>
+    <span class="c"># external electric field</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">TIP_MOBILITY</span> <span class="o">*</span> <span class="n">external_field</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">,</span> <span class="p">:])</span>
+    
+    <span class="n">box</span><span class="o">.</span><span class="n">update_charges</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">upward</span><span class="p">(</span><span class="n">MULTIPOLAR_TERMS</span><span class="p">)</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">downward</span><span class="p">()</span>
+    <span class="n">box</span><span class="o">.</span><span class="n">solve_all</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">CONDUCTOR_THICKNESS</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    
+    <span class="n">box</span><span class="o">.</span><span class="n">collect_solutions</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">sfields</span> <span class="o">=</span> <span class="n">self_fields</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+    <span class="n">E</span> <span class="o">=</span> <span class="p">(</span><span class="n">MAXWELL_FACTOR</span> <span class="o">*</span> <span class="n">box</span><span class="o">.</span><span class="n">field</span>
+         <span class="o">+</span> <span class="n">MAXWELL_FACTOR</span> <span class="o">*</span> <span class="n">sfields</span>
+         <span class="o">+</span> <span class="n">external_field</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">,</span> <span class="p">:]))</span>
+
+    <span class="n">absE</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">E</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="c"># An unit vector with the same direction as E</span>
+    <span class="n">u</span> <span class="o">=</span> <span class="n">E</span> <span class="o">/</span> <span class="n">absE</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">]</span>
+
+    <span class="c"># Now we can calculate the absolute value of the velocity</span>
+    <span class="n">vabs</span> <span class="o">=</span> <span class="n">TIP_MOBILITY</span> <span class="o">*</span> <span class="n">where</span><span class="p">(</span><span class="n">absE</span> <span class="o">&gt;</span> <span class="n">TIP_MIN_FIELD</span><span class="p">,</span> <span class="n">absE</span> <span class="o">-</span> <span class="n">TIP_MIN_FIELD</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">v</span> <span class="o">=</span> <span class="n">u</span> <span class="o">*</span> <span class="n">vabs</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">]</span>
+    
+    <span class="k">return</span> <span class="n">v</span>
+
+</div>
+<div class="viewcode-block" id="self_fields"><a class="viewcode-back" href="../modules.html#grow_tree.self_fields">[docs]</a><span class="k">def</span> <span class="nf">self_fields</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Calculates the fields created by the charges at the streamer tips</span>
+<span class="sd">    on themselves. &quot;&quot;&quot;</span>
+    
+    <span class="n">iterm</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">terminals</span><span class="p">()</span>
+    <span class="n">parents</span> <span class="o">=</span> <span class="n">tr</span><span class="o">.</span><span class="n">parents</span><span class="p">()[</span><span class="n">iterm</span><span class="p">]</span>
+    
+    <span class="n">dr</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">iterm</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">r</span><span class="p">[</span><span class="n">parents</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="n">u</span> <span class="o">=</span> <span class="n">dr</span> <span class="o">/</span> <span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dr</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)))[:,</span> <span class="n">newaxis</span><span class="p">]</span>
+    
+    <span class="k">return</span> <span class="n">q</span><span class="p">[</span><span class="n">iterm</span><span class="p">][:,</span> <span class="n">newaxis</span><span class="p">]</span> <span class="o">*</span> <span class="n">u</span> <span class="o">/</span> <span class="n">CONDUCTOR_THICKNESS</span><span class="o">**</span><span class="mi">2</span>
+
+</div>
+<div class="viewcode-block" id="relax"><a class="viewcode-back" href="../modules.html#grow_tree.relax">[docs]</a><span class="k">def</span> <span class="nf">relax</span><span class="p">(</span><span class="n">box</span><span class="p">,</span> <span class="n">tr</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">dt</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Relax the conductor :class:`tree.Tree` *tr* for a time *dt*. </span>
+
+<span class="sd">    Arguments:</span>
+
+<span class="sd">      * *tr*: the :class:`tree.Tree` instance containing the tree structure.</span>
+<span class="sd">      * *r*: an array containing the node locations.</span>
+<span class="sd">      * *q0*: an array containing the charges of the nodes.</span>
+<span class="sd">      * *dt*: the time step.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">latest_phi</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">error_dq</span>
+    
+    <span class="c">#with ContextTimer(&quot;re-computing Ohm matrix&quot;):</span>
+    <span class="c"># If we have an electrode, we fix q[0] by setting the first row of</span>
+    <span class="c"># M to zero.  </span>
+    <span class="n">fix</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">ELECTRODE</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="c"># On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know</span>
+    <span class="c"># where it comes from.  Probably it was a reliq of the mid-points approach</span>
+    <span class="c"># (But it was duplicated in ohm_matrix anyway!).  I am removing it.</span>
+    <span class="n">M</span> <span class="o">=</span> <span class="n">CONDUCTANCE</span> <span class="o">*</span> <span class="n">tr</span><span class="o">.</span><span class="n">ohm_matrix</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">fix</span><span class="o">=</span><span class="n">fix</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">q0</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">t0</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="k">global</span> <span class="n">latest_phi</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">error_dq</span>
+
+        <span class="n">phi</span> <span class="o">=</span> <span class="n">solve_phi</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">box</span><span class="p">)</span>
+        <span class="c"># err = sqrt(sum((phi - box.phi)**2)) / len(phi)        </span>
+        <span class="n">latest_phi</span> <span class="o">=</span> <span class="n">phi</span>
+        <span class="n">error</span> <span class="o">=</span> <span class="n">phi</span> <span class="o">-</span> <span class="n">latest_phi</span>
+        <span class="n">error_dq</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+        
+        <span class="n">dq</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">phi</span> <span class="o">+</span> <span class="n">external_potential</span><span class="p">(</span><span class="n">r</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">dq</span>
+
+    <span class="n">d</span> <span class="o">=</span> <span class="n">ode</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">set_integrator</span><span class="p">(</span><span class="s">&#39;vode&#39;</span><span class="p">,</span>  <span class="n">nsteps</span><span class="o">=</span><span class="mi">250000</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+    <span class="n">d</span><span class="o">.</span><span class="n">set_initial_value</span><span class="p">(</span><span class="n">q0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">d</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">d</span><span class="o">.</span><span class="n">y</span>
+
+</div>
+<span class="k">def</span> <span class="nf">solve_phi</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">box</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">FMM_THRESHOLD</span> <span class="ow">and</span> <span class="n">box</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="c"># with ContextTimer(&quot;FMM&quot;) as ct_fmm: </span>
+        <span class="n">box</span><span class="o">.</span><span class="n">update_charges</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+
+        <span class="n">box</span><span class="o">.</span><span class="n">upward</span><span class="p">(</span><span class="n">MULTIPOLAR_TERMS</span><span class="p">)</span>
+        <span class="n">box</span><span class="o">.</span><span class="n">downward</span><span class="p">()</span>
+        <span class="n">box</span><span class="o">.</span><span class="n">solve_all</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">CONDUCTOR_THICKNESS</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="n">box</span><span class="o">.</span><span class="n">collect_solutions</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+        <span class="n">phi</span> <span class="o">=</span> <span class="n">MAXWELL_FACTOR</span> <span class="o">*</span> <span class="n">box</span><span class="o">.</span><span class="n">phi</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># with ContextTimer(&quot;direct&quot;) as ct_direct:</span>
+        <span class="k">if</span> <span class="n">ELECTRODE</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">rx</span><span class="p">,</span> <span class="n">qx</span> <span class="o">=</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rx</span><span class="p">,</span> <span class="n">qx</span> <span class="o">=</span> <span class="n">ELECTRODE</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+
+        <span class="n">phi0</span> <span class="o">=</span> <span class="n">MAXWELL_FACTOR</span> <span class="o">*</span> <span class="n">mpolar</span><span class="o">.</span><span class="n">direct</span><span class="p">(</span><span class="n">rx</span><span class="p">,</span> <span class="n">qx</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span>
+                                              <span class="n">CONDUCTOR_THICKNESS</span><span class="p">)</span>
+        <span class="n">phi</span> <span class="o">=</span> <span class="n">phi0</span>
+
+    <span class="k">return</span> <span class="n">phi</span>
+
+
+<div class="viewcode-block" id="symmetric_gaussian"><a class="viewcode-back" href="../modules.html#grow_tree.symmetric_gaussian">[docs]</a><span class="k">def</span> <span class="nf">symmetric_gaussian</span><span class="p">(</span><span class="n">dr</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Samples a branch from a symmetric, gaussian branching model.</span>
+<span class="sd">    In a plane perpendicular to dr we sample dr1 from a cylindrically</span>
+<span class="sd">    symmetric gaussian distribution; the two branching points are dr1 and</span>
+<span class="sd">    its symmetric vector wrt dr. &quot;&quot;&quot;</span>
+
+    <span class="n">u</span> <span class="o">=</span> <span class="n">dr</span> <span class="o">/</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr</span><span class="p">)</span>
+    <span class="c"># We find two unit vectors orthonormal to u (also dr); note that this</span>
+    <span class="c"># fails if u is parallel to x !!!</span>
+    
+    <span class="n">ex</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">e1</span> <span class="o">=</span> <span class="n">ex</span> <span class="o">-</span> <span class="n">dot</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span> <span class="o">*</span> <span class="n">u</span>
+    <span class="n">e1</span> <span class="o">=</span> <span class="n">e1</span> <span class="o">/</span> <span class="n">norm</span><span class="p">(</span><span class="n">e1</span><span class="p">)</span>
+    
+    <span class="n">e2</span> <span class="o">=</span> <span class="n">cross</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">e1</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">BRANCH_IN_XZ</span><span class="p">:</span>
+        <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">FIXED_BRANCHING_ANGLE</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr</span><span class="p">)</span> <span class="o">*</span> <span class="n">tan</span><span class="p">(</span><span class="n">FIXED_BRANCHING_ANGLE</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="mf">0.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">randn</span><span class="p">(),</span> <span class="mf">0.0</span>
+    
+    <span class="n">dr1</span> <span class="o">=</span> <span class="n">dr</span> <span class="o">+</span> <span class="p">(</span><span class="n">p</span> <span class="o">*</span> <span class="n">e1</span> <span class="o">+</span> <span class="n">q</span> <span class="o">*</span> <span class="n">e2</span><span class="p">)</span>
+    <span class="n">dr2</span> <span class="o">=</span> <span class="n">dr</span> <span class="o">-</span> <span class="p">(</span><span class="n">p</span> <span class="o">*</span> <span class="n">e1</span> <span class="o">+</span> <span class="n">q</span> <span class="o">*</span> <span class="n">e2</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">FIXED_BRANCHING_ANGLE</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c"># This is to avoid too long segments at branching points.</span>
+        <span class="c"># Presently I am doing it only here to preserve compatibility</span>
+        <span class="c"># with the algorithm described in the paper as of Sat Mar 23 20:58:46 2013</span>
+        <span class="n">dr1</span> <span class="o">*=</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr</span><span class="p">)</span> <span class="o">/</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr1</span><span class="p">)</span>
+        <span class="n">dr2</span> <span class="o">*=</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr</span><span class="p">)</span> <span class="o">/</span> <span class="n">norm</span><span class="p">(</span><span class="n">dr2</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">dr1</span><span class="p">,</span> <span class="n">dr2</span>
+
+</div>
+<div class="viewcode-block" id="external_field"><a class="viewcode-back" href="../modules.html#grow_tree.external_field">[docs]</a><span class="k">def</span> <span class="nf">external_field</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Calculates the external field at points *r*.  This is calculated</span>
+<span class="sd">    from ``EXTERNAL_FIELD`` and ``ELECTRODE_POTENTIAL``.  As the code stands now</span>
+<span class="sd">    only these two possibilities are physically meaningful:</span>
+
+<span class="sd">     1. Specify ``EXTERNAL_FIELD`` with a planar electrode or with no electrode,</span>
+<span class="sd">        but use ``ELECTRODE_POTENTIAL=0``.</span>
+<span class="sd">     2. ``ELECTRODE_POTENTIAL != 0``, but ``ELECTRODE_GEOMETRY = &#39;sphere&#39;`` and</span>
+<span class="sd">        ``EXTERNAL_FIELD = 0``.</span>
+
+<span class="sd">    However, we allow the user to shoot himself on his foot, so he can</span>
+<span class="sd">    select any arbitrary combination of these parameters.  Beware.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">EXTERNAL_FIELD_VECTOR</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span>
+    
+    <span class="k">if</span> <span class="n">ELECTRODE_POTENTIAL</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">field</span>
+
+    <span class="n">center</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">ELECTRODE_RADIUS</span><span class="p">])</span>
+    <span class="n">dr</span> <span class="o">=</span> <span class="n">r</span> <span class="o">-</span> <span class="n">center</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="n">rabs</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dr</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">field</span> <span class="o">+</span> <span class="p">(</span><span class="n">ELECTRODE_RADIUS</span> <span class="o">*</span> <span class="n">ELECTRODE_POTENTIAL</span>
+                     <span class="o">*</span> <span class="n">dr</span> <span class="o">/</span> <span class="n">rabs</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">]</span><span class="o">**</span><span class="mi">3</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">field</span>
+
+</div>
+<div class="viewcode-block" id="external_potential"><a class="viewcode-back" href="../modules.html#grow_tree.external_potential">[docs]</a><span class="k">def</span> <span class="nf">external_potential</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Calculates the external potential at points *r*.  See above, in</span>
+<span class="sd">    external_field for the risks here.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="o">-</span><span class="n">dot</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">EXTERNAL_FIELD_VECTOR</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ELECTRODE_POTENTIAL</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">phi</span>
+
+    <span class="n">center</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">ELECTRODE_RADIUS</span><span class="p">])</span>
+    <span class="n">dr</span> <span class="o">=</span> <span class="n">r</span> <span class="o">-</span> <span class="n">center</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="n">rabs</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">dr</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="n">phi</span> <span class="o">+</span> <span class="n">ELECTRODE_RADIUS</span> <span class="o">*</span> <span class="n">ELECTRODE_POTENTIAL</span> <span class="o">/</span> <span class="n">rabs</span>
+
+    <span class="k">return</span> <span class="n">phi</span>
+
+
+</div>
+<div class="viewcode-block" id="init_electrode"><a class="viewcode-back" href="../modules.html#grow_tree.init_electrode">[docs]</a><span class="k">def</span> <span class="nf">init_electrode</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot; Uses the input parameters to select an electrode geometry. &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">planar</span><span class="p">():</span>
+        <span class="sd">&quot;&quot;&quot; Planar electrode.  Always located at z=0. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">electrodes</span><span class="o">.</span><span class="n">Planar</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">sphere</span><span class="p">():</span>
+        <span class="sd">&quot;&quot;&quot; Sphere electrode.  Located at [0, 0, -ELECTRODE_RADIUS]. &quot;&quot;&quot;</span>
+        <span class="n">center</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">ELECTRODE_RADIUS</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">electrodes</span><span class="o">.</span><span class="n">Sphere</span><span class="p">(</span><span class="n">center</span><span class="p">,</span> <span class="n">ELECTRODE_RADIUS</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">null</span><span class="p">():</span>
+        <span class="sd">&quot;&quot;&quot; No electrode. &quot;&quot;&quot;</span>
+        <span class="c"># return electrodes.NullElectrode()</span>
+        <span class="c"># This is actually faster:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+
+    <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">planar</span><span class="o">=</span><span class="n">planar</span><span class="p">,</span> <span class="n">plane</span><span class="o">=</span><span class="n">planar</span><span class="p">,</span> <span class="n">sphere</span><span class="o">=</span><span class="n">sphere</span><span class="p">,</span> <span class="n">null</span><span class="o">=</span><span class="n">null</span><span class="p">,</span> <span class="n">none</span><span class="o">=</span><span class="n">null</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">d</span><span class="p">[</span><span class="n">ELECTRODE_GEOMETRY</span><span class="p">]()</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s">&quot;Electrode geometry &#39;</span><span class="si">%s</span><span class="s">&#39; not recognized&quot;</span>
+                       <span class="o">%</span> <span class="n">ELECTRODE_GEOMETRY</span><span class="p">)</span>
+
+</div>
+<span class="k">def</span> <span class="nf">plot_projections</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s">&quot;X&quot;</span><span class="p">,</span> <span class="s">&quot;Y&quot;</span><span class="p">,</span> <span class="s">&quot;Z&quot;</span><span class="p">]</span>
+    
+    <span class="n">axes</span> <span class="o">=</span> <span class="p">[(</span><span class="n">X</span><span class="p">,</span> <span class="n">Z</span><span class="p">),</span> <span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">Z</span><span class="p">),</span> <span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">)]</span>
+    <span class="n">pylab</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.35</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">d1</span><span class="p">,</span> <span class="n">d2</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">axes</span><span class="p">):</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">pylab</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">r</span><span class="p">[:,</span> <span class="n">d1</span><span class="p">],</span> <span class="n">r</span><span class="p">[:,</span> <span class="n">d2</span><span class="p">],</span> <span class="n">c</span><span class="o">=</span><span class="n">q</span><span class="p">,</span>
+                      <span class="n">s</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">faceted</span><span class="o">=</span><span class="bp">False</span><span class="p">),</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="n">d1</span><span class="p">])</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="n">d2</span><span class="p">])</span>
+        
+        <span class="c">#ax.quiver(r[iterm, 0], r[iterm, 2], field[0, :], field[2, :])</span>
+        <span class="c">#ax.set_xlim([0.0, 1.0])</span>
+        <span class="c">#ax.set_ylim([-0.2, 1.0])</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

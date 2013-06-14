@@ -1,0 +1,491 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>tree &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for tree</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot; This module contains the data representation for the structure of trees.</span>
+<span class="sd">Note that we separate the structure of the branched tree from its</span>
+<span class="sd">realization, that would contain things such as charges, positions, etc.</span>
+<span class="sd">that evolve even when the structure is fixed.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">random</span> <span class="kn">import</span> <span class="n">random</span> <span class="k">as</span> <span class="n">uniform</span>
+<span class="kn">from</span> <span class="nn">scipy.sparse</span> <span class="kn">import</span> <span class="n">lil_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="o">*</span>
+
+<div class="viewcode-block" id="Tree"><a class="viewcode-back" href="../modules.html#tree.Tree">[docs]</a><span class="k">class</span> <span class="nc">Tree</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Instances of the Tree class contain the topological information</span>
+<span class="sd">    of a tree discharge: i.e. they encapsulate the relations between different</span>
+<span class="sd">    segments in a tree but not about locations, conductivities etc..&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c"># We must carry a global (tree-level) index to access the parameter</span>
+        <span class="c"># data arrays</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">segments</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="bp">None</span>
+        
+
+<div class="viewcode-block" id="Tree.add_segment"><a class="viewcode-back" href="../modules.html#tree.Tree.add_segment">[docs]</a>    <span class="k">def</span> <span class="nf">add_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">segment</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Adds a *segment* to this tree.  Returns the index of the segment</span>
+<span class="sd">        inside the tree. &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">segment</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">return</span> <span class="n">index</span>
+
+</div>
+<div class="viewcode-block" id="Tree.parents"><a class="viewcode-back" href="../modules.html#tree.Tree.parents">[docs]</a>    <span class="k">def</span> <span class="nf">parents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_index</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Builds an array with the indices to each segment&#39;s parent.</span>
+<span class="sd">        The root segment gets an index *root_index*. &quot;&quot;&quot;</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;i&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">segment</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">p</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">index</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="n">p</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">root_index</span>
+
+        <span class="k">return</span> <span class="n">p</span>
+
+</div>
+<div class="viewcode-block" id="Tree.make_root"><a class="viewcode-back" href="../modules.html#tree.Tree.make_root">[docs]</a>    <span class="k">def</span> <span class="nf">make_root</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Creates a segment node to be root of this tree. &quot;&quot;&quot;</span>
+        <span class="n">root</span> <span class="o">=</span> <span class="n">Segment</span><span class="p">()</span>
+        <span class="n">root</span><span class="o">.</span><span class="n">set_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">root</span>
+        
+        <span class="k">return</span> <span class="n">root</span>
+
+</div>
+<div class="viewcode-block" id="Tree.terminals"><a class="viewcode-back" href="../modules.html#tree.Tree.terminals">[docs]</a>    <span class="k">def</span> <span class="nf">terminals</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Finds all segments contained in the tree that do not</span>
+<span class="sd">        have any children. Returns an array with segment indices. &quot;&quot;&quot;</span>
+        <span class="n">l</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">segment</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">array</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Tree.branches"><a class="viewcode-back" href="../modules.html#tree.Tree.branches">[docs]</a>    <span class="k">def</span> <span class="nf">branches</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Finds all indices of segments that branch in the tree&quot;&quot;&quot;</span>
+        <span class="n">l</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">segment</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">l</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">array</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Tree.extend"><a class="viewcode-back" href="../modules.html#tree.Tree.extend">[docs]</a>    <span class="k">def</span> <span class="nf">extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Extends the tree adding one children to each segment indexed</span>
+<span class="sd">        by *indices*, in that order.  This is used to extend a propagating tree.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">:</span>
+            <span class="n">new_segment</span> <span class="o">=</span> <span class="n">Segment</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">add_child</span><span class="p">(</span><span class="n">new_segment</span><span class="p">)</span>
+            
+</div>
+<div class="viewcode-block" id="Tree.zeros"><a class="viewcode-back" href="../modules.html#tree.Tree.zeros">[docs]</a>    <span class="k">def</span> <span class="nf">zeros</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Returns an array that can hold all the data needed for a variable</span>
+<span class="sd">        in this tree&#39;s segments.  For multi-dimension data, use *dim*. &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dim</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,))</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">dim</span><span class="p">))</span>
+
+</div>
+<div class="viewcode-block" id="Tree.lengths"><a class="viewcode-back" href="../modules.html#tree.Tree.lengths">[docs]</a>    <span class="k">def</span> <span class="nf">lengths</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoints</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Returns an array with the segment lengths of the tree, given</span>
+<span class="sd">        an array with the *endpoints*. &quot;&quot;&quot;</span>
+        
+        <span class="n">parents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parents</span><span class="p">()</span>
+        
+        <span class="n">l</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">sum</span><span class="p">((</span><span class="n">endpoints</span> <span class="o">-</span> <span class="n">endpoints</span><span class="p">[</span><span class="n">parents</span><span class="p">,</span> <span class="p">:])</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">l</span>
+
+</div>
+<div class="viewcode-block" id="Tree.midpoints"><a class="viewcode-back" href="../modules.html#tree.Tree.midpoints">[docs]</a>    <span class="k">def</span> <span class="nf">midpoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoints</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Returns an array with the segment midpoints of the tree, given</span>
+<span class="sd">        an array with the *endpoints*. &quot;&quot;&quot;</span>
+
+        <span class="n">parents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parents</span><span class="p">()</span>
+        <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">endpoints</span> <span class="o">+</span> <span class="n">endpoints</span><span class="p">[</span><span class="n">parents</span><span class="p">,</span> <span class="p">:])</span>
+    
+</div>
+<div class="viewcode-block" id="Tree.ohm_matrix"><a class="viewcode-back" href="../modules.html#tree.Tree.ohm_matrix">[docs]</a>    <span class="k">def</span> <span class="nf">ohm_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoints</span><span class="p">,</span> <span class="n">fix</span><span class="o">=</span><span class="p">[]):</span>
+        <span class="sd">&quot;&quot;&quot; Builds a matrix M that will provide the evolution of charges</span>
+<span class="sd">        in every segment of the tree as dq/dt = M . phi, where phi is</span>
+<span class="sd">        the potential at the center of each segment and &#39;.&#39; is the dot product.</span>
+<span class="sd">        This function builds the matrix from scratch.  Usually it is much</span>
+<span class="sd">        better to keep updating the matrix as the tree grows.</span>
+
+<span class="sd">        * *endpoints* must contain an array with the endpoints.</span>
+<span class="sd">        * *fix* contains an array with indices of nodes with a fixed charge.</span>
+<span class="sd">          usually that means the root node.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">(</span><span class="n">endpoints</span><span class="p">)</span>
+        <span class="n">linv</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">l</span>
+        
+        <span class="c"># We build the matrix in LIL format first, later we convert to a</span>
+        <span class="c"># format more efficient for matrix-vector multiplications</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">lil_matrix</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">index</span>
+            <span class="n">m</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+                <span class="n">j</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">index</span>
+                <span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">linv</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+                <span class="n">m</span> <span class="o">-=</span> <span class="n">linv</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">segment</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">j</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">index</span>
+                <span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">linv</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                <span class="n">m</span> <span class="o">-=</span> <span class="n">linv</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>     
+
+            <span class="n">M</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">m</span>
+
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fix</span><span class="p">:</span>
+            <span class="n">M</span><span class="p">[</span><span class="n">f</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">return</span> <span class="n">csr_matrix</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Tree.branch_label"><a class="viewcode-back" href="../modules.html#tree.Tree.branch_label">[docs]</a>    <span class="k">def</span> <span class="nf">branch_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Returns an array with an integer for each node that is unique</span>
+<span class="sd">        for the branch where it sits. &quot;&quot;&quot;</span>
+        
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;i&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">segment</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">segment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span>
+        
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">labels</span><span class="p">[</span><span class="n">segment</span><span class="o">.</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">label</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+
+            <span class="n">segment</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">branch_label</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="mi">2</span><span class="o">*</span><span class="n">label</span> <span class="o">+</span> <span class="n">i</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="n">c</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">labels</span>
+
+    </div>
+<div class="viewcode-block" id="Tree.branch_distance"><a class="viewcode-back" href="../modules.html#tree.Tree.branch_distance">[docs]</a>    <span class="k">def</span> <span class="nf">branch_distance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoints</span><span class="p">,</span> <span class="n">dist</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                        <span class="n">lengths</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Returns an array with the distance of each node from the</span>
+<span class="sd">        branching immediately above it. The distance is calculated along the</span>
+<span class="sd">        branch. &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dist</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;d&#39;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">segment</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">segment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span>
+        
+        <span class="k">if</span> <span class="n">lengths</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">lengths</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lengths</span><span class="p">(</span><span class="n">endpoints</span><span class="p">)</span>
+            
+        <span class="n">l</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">dist</span><span class="p">[</span><span class="n">segment</span><span class="o">.</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">l</span>
+            <span class="n">l</span> <span class="o">+=</span> <span class="n">lengths</span><span class="p">[</span><span class="n">segment</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+            
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+
+            <span class="n">segment</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">branch_distance</span><span class="p">(</span><span class="n">endpoints</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="n">c</span><span class="p">,</span> <span class="n">lengths</span><span class="o">=</span><span class="n">lengths</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dist</span>
+
+</div>
+<div class="viewcode-block" id="Tree.reconnects"><a class="viewcode-back" href="../modules.html#tree.Tree.reconnects">[docs]</a>    <span class="k">def</span> <span class="nf">reconnects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoints</span><span class="p">,</span> <span class="n">rmin</span><span class="o">=</span><span class="mf">5e-4</span><span class="p">,</span> <span class="n">dmin</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Finds reconnections in a tree. &quot;&quot;&quot;</span>
+        
+        <span class="n">term</span> <span class="o">=</span> <span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">terminals</span><span class="p">())</span>
+        <span class="n">rterm</span> <span class="o">=</span> <span class="n">endpoints</span><span class="p">[</span><span class="n">term</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_label</span><span class="p">()</span>
+        <span class="n">lterm</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">term</span><span class="p">]</span>
+
+        <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_distance</span><span class="p">(</span><span class="n">endpoints</span><span class="p">)</span>
+        <span class="n">dterm</span> <span class="o">=</span> <span class="n">dist</span><span class="p">[</span><span class="n">term</span><span class="p">]</span>
+
+
+        <span class="c"># We look only at node pairs where one of the node is a terminal.</span>
+        <span class="n">r2</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">rterm</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">endpoints</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">,</span> <span class="p">:])</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">dlabel</span> <span class="o">=</span> <span class="n">lterm</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">labels</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">]</span>
+
+        <span class="c"># These still include branching events, which are very close but</span>
+        <span class="c"># close to the branching points</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">logical_and</span><span class="p">(</span><span class="n">dlabel</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">r2</span> <span class="o">&lt;=</span> <span class="n">rmin</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">logical_and</span><span class="p">(</span><span class="n">dterm</span><span class="p">[</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span> <span class="o">&gt;</span> <span class="n">dmin</span><span class="p">,</span> <span class="n">dist</span><span class="p">[:,</span> <span class="n">newaxis</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">dmin</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">logical_and</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+
+        <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="n">nonzero</span><span class="p">(</span><span class="n">u</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+</div>
+<div class="viewcode-block" id="Tree.save"><a class="viewcode-back" href="../modules.html#tree.Tree.save">[docs]</a>    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Saves the tree structure into file fname. &quot;&quot;&quot;</span>
+        <span class="n">parents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parents</span><span class="p">()</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+        <span class="n">savetxt</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">c_</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">parents</span><span class="p">])</span>
+
+</div>
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Tree.loadtxt"><a class="viewcode-back" href="../modules.html#tree.Tree.loadtxt">[docs]</a>    <span class="k">def</span> <span class="nf">loadtxt</span><span class="p">(</span><span class="n">fname</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Loads a tree structure from a txt file [DEBUG]. &quot;&quot;&quot;</span>
+        <span class="n">indices</span><span class="p">,</span> <span class="n">parents</span> <span class="o">=</span> <span class="n">loadtxt</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">unpack</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Tree</span><span class="o">.</span><span class="n">from_parents</span><span class="p">(</span><span class="n">parents</span><span class="p">)</span>
+
+</div>
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Tree.from_parents"><a class="viewcode-back" href="../modules.html#tree.Tree.from_parents">[docs]</a>    <span class="k">def</span> <span class="nf">from_parents</span><span class="p">(</span><span class="n">parents</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Builds a tree from a list of the parent indices. &quot;&quot;&quot;</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">Tree</span><span class="p">()</span>
+
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">arange</span><span class="p">(</span><span class="n">parents</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">make_root</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">seg</span> <span class="o">=</span> <span class="n">Segment</span><span class="p">()</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="n">parents</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span><span class="o">.</span><span class="n">add_child</span><span class="p">(</span><span class="n">seg</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">t</span>
+
+    </div>
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="Segment"><a class="viewcode-back" href="../modules.html#tree.Segment">[docs]</a><span class="k">class</span> <span class="nc">Segment</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; This is class of the segments composing a :class:`Tree`.  &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">children</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tree</span> <span class="o">=</span> <span class="bp">None</span>
+
+        
+    <span class="k">def</span> <span class="nf">set_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tree</span> <span class="o">=</span> <span class="n">tree</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">add_segment</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">set_parent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="n">parent</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_tree</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">tree</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="Segment.get"><a class="viewcode-back" href="../modules.html#tree.Segment.get">[docs]</a>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Gets the value in array a corresponding to this segment. &quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="n">a</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+
+</div>
+<div class="viewcode-block" id="Segment.set"><a class="viewcode-back" href="../modules.html#tree.Segment.set">[docs]</a>    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Sets the value in array a corresponding to this segment. &quot;&quot;&quot;</span>
+
+        <span class="n">a</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+</div>
+<div class="viewcode-block" id="Segment.iter_adjacent"><a class="viewcode-back" href="../modules.html#tree.Segment.iter_adjacent">[docs]</a>    <span class="k">def</span> <span class="nf">iter_adjacent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Iterates over all adjacent segments, including parent and</span>
+<span class="sd">        children (if any). &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span>
+
+        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">child</span>
+
+
+        </div>
+<div class="viewcode-block" id="Segment.add_child"><a class="viewcode-back" href="../modules.html#tree.Segment.add_child">[docs]</a>    <span class="k">def</span> <span class="nf">add_child</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Adds the :class:`Segment` *other* as a child of this segment. &quot;&quot;&quot;</span>
+        <span class="n">other</span><span class="o">.</span><span class="n">set_parent</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
+
+    
+</div></div>
+<div class="viewcode-block" id="random_branching_tree"><a class="viewcode-back" href="../modules.html#tree.random_branching_tree">[docs]</a><span class="k">def</span> <span class="nf">random_branching_tree</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Builds a branched tree of n segments where every segment has a</span>
+<span class="sd">    probability p of having two descendants.  This produces nice pictures</span>
+<span class="sd">    and can be useful for testing. &quot;&quot;&quot;</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">Tree</span><span class="p">()</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">make_root</span><span class="p">()</span>
+
+    <span class="n">leafs</span> <span class="o">=</span> <span class="p">[</span><span class="n">root</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="n">l</span> <span class="o">=</span> <span class="n">leafs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c"># Every leaf has at least one descendant</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">Segment</span><span class="p">()</span>
+        <span class="n">l</span><span class="o">.</span><span class="n">add_child</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="n">leafs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+        <span class="c"># With probability p it has two children</span>
+        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">Segment</span><span class="p">()</span>
+            <span class="n">l</span><span class="o">.</span><span class="n">add_child</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="n">leafs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+    <span class="k">return</span> <span class="n">tree</span>
+
+</div>
+<div class="viewcode-block" id="sample_endpoints"><a class="viewcode-back" href="../modules.html#tree.sample_endpoints">[docs]</a><span class="k">def</span> <span class="nf">sample_endpoints</span><span class="p">(</span><span class="n">tree</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Gives endpoints to a tree structure.  Useful for plotting sample</span>
+<span class="sd">    trees [DEBUG]. &quot;&quot;&quot;</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">deltav</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]]),</span>
+              <span class="mi">2</span><span class="p">:</span> <span class="n">array</span><span class="p">([[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]])}</span>
+    
+    <span class="k">def</span> <span class="nf">recurse</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">leaf</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">leaf</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">leaf</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">leaf</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">+</span> <span class="n">v</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">children</span><span class="p">)</span>
+        <span class="n">lr</span> <span class="o">=</span> <span class="n">leaf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">leaf</span><span class="o">.</span><span class="n">children</span><span class="p">):</span>
+            <span class="n">vnew</span> <span class="o">=</span> <span class="p">(</span><span class="n">v</span> <span class="o">*</span> <span class="n">array</span><span class="p">([</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">])</span> <span class="o">+</span>
+                    <span class="p">(</span><span class="n">deltav</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
+                    <span class="o">*</span> <span class="n">exp</span><span class="p">(</span><span class="n">lr</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="mi">100</span><span class="p">))</span>
+            
+            <span class="n">recurse</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">vnew</span><span class="p">)</span>
+
+    <span class="n">recurse</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">root</span><span class="p">,</span> <span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
+
+    <span class="k">return</span> <span class="n">r</span>
+
+
+    </div>
+<span class="k">def</span> <span class="nf">test</span><span class="p">():</span>
+    <span class="kn">import</span> <span class="nn">pylab</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">random_branching_tree</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">)</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">sample_endpoints</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">tree</span><span class="p">:</span>
+        <span class="n">ep</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">ip</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="n">ip</span> <span class="o">=</span> <span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">pylab</span><span class="o">.</span><span class="n">plot</span><span class="p">([</span><span class="n">ip</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">ep</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">ip</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">ep</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span> <span class="n">lw</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="s">&#39;k&#39;</span><span class="p">)</span>
+
+    <span class="n">pylab</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">test</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

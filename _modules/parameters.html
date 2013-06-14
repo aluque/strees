@@ -1,0 +1,261 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>parameters &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for parameters</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot; This is the parameter description file.  Basically it provides a namespace</span>
+<span class="sd">where we store a function per input parameter.  Each function receives a string</span>
+<span class="sd">and is responsible for converting to the appropriate type, checking for</span>
+<span class="sd">allowed values.  The docstring of the function is a description of the</span>
+<span class="sd">parameter. &quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">readinput</span> <span class="kn">import</span> <span class="n">positive</span><span class="p">,</span> <span class="n">nonnegative</span><span class="p">,</span> <span class="n">default</span>
+
+<div class="viewcode-block" id="run_name"><a class="viewcode-back" href="../modules.html#parameters.run_name">[docs]</a><span class="k">def</span> <span class="nf">run_name</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Name of the run. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">s</span>
+</div>
+<div class="viewcode-block" id="out_file"><a class="viewcode-back" href="../modules.html#parameters.out_file">[docs]</a><span class="k">def</span> <span class="nf">out_file</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; File name (including path) of the .h5 output file. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">s</span>
+</div>
+<div class="viewcode-block" id="desc"><a class="viewcode-back" href="../modules.html#parameters.desc">[docs]</a><span class="k">def</span> <span class="nf">desc</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; A comment to describe this simulation.  It is ignored by the code. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">s</span>
+
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<div class="viewcode-block" id="random_seed"><a class="viewcode-back" href="../modules.html#parameters.random_seed">[docs]</a><span class="k">def</span> <span class="nf">random_seed</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Seed for the random generator. If &lt; 0 the system time is used (default).&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    </div>
+<div class="viewcode-block" id="dummy"><a class="viewcode-back" href="../modules.html#parameters.dummy">[docs]</a><span class="k">def</span> <span class="nf">dummy</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; This parameter is completely ignored.  It is used only to produce</span>
+<span class="sd">    series of identical runs. &quot;&quot;&quot;</span>
+</div>
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">max_charges_per_box</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Maximum number of charges per box in the FMM refinement scheme. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">fmm_threshold</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Threshold in the number of charges between using the direct solver \</span>
+<span class="sd">    and FMM solver. &quot;&quot;&quot;</span>
+
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">multipolar_terms</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Order of the multipole expansion in the FMM. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="external_field"><a class="viewcode-back" href="../modules.html#parameters.external_field">[docs]</a><span class="k">def</span> <span class="nf">external_field</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Externally applied electric field in the z direction. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+</div>
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">conductance</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Conductance of the channels. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">maxwell_factor</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Maxwell factor for the potential and electric fields.  In SI units</span>
+<span class="sd">    it is 1 / 4 pi epsilon_0&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+    
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">tip_mobility</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Ratio between the tip velocity of each streamer and the local field. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="nd">@nonnegative</span>
+<span class="k">def</span> <span class="nf">tip_min_field</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Minimum field at the tip for a streamer to propagate. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="nd">@nonnegative</span>
+<span class="k">def</span> <span class="nf">initial_nodes</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Starts the simulation with a vertical string with this number of </span>
+<span class="sd">    charged nodes separated a distance CONDUCTOR_THICKNESS. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">end_time</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Final time of the simulation. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">time_step</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Timestep of the simulation. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">conductor_thickness</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Thickness of the conductors for the thin-wire approximation. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@nonnegative</span>
+<span class="k">def</span> <span class="nf">branching_probability</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Probability that a filament branches per unit distance travelled. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">branching_sigma</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Standard deviation of the branching dispacement in the symmetric gaussian branching model. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="nd">@nonnegative</span>
+<span class="k">def</span> <span class="nf">single_branching_time</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; If nonzero, performs a single branching at the given time. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="viewcode-block" id="single_branching_z"><a class="viewcode-back" href="../modules.html#parameters.single_branching_z">[docs]</a><span class="k">def</span> <span class="nf">single_branching_z</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; If nonzero, performs a single branching at the given z. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="viewcode-block" id="fixed_branching_angle"><a class="viewcode-back" href="../modules.html#parameters.fixed_branching_angle">[docs]</a><span class="k">def</span> <span class="nf">fixed_branching_angle</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; If nonzero, fixes the angle between sibling branches. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+<div class="viewcode-block" id="branch_in_xz"><a class="viewcode-back" href="../modules.html#parameters.branch_in_xz">[docs]</a><span class="k">def</span> <span class="nf">branch_in_xz</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; If true, branches always within the XZ plane. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s">&#39;true&#39;</span><span class="p">)</span>
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="s">&#39;null&#39;</span><span class="p">)</span>
+<div class="viewcode-block" id="electrode_geometry"><a class="viewcode-back" href="../modules.html#parameters.electrode_geometry">[docs]</a><span class="k">def</span> <span class="nf">electrode_geometry</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; The electrode geometry. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+</div>
+<span class="nd">@positive</span>
+<span class="k">def</span> <span class="nf">electrode_radius</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Radius of an spherical electrode. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+<span class="nd">@default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="viewcode-block" id="electrode_potential"><a class="viewcode-back" href="../modules.html#parameters.electrode_potential">[docs]</a><span class="k">def</span> <span class="nf">electrode_potential</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Electrostatic potential of a (spherical) electrode. &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="mf">1e10</span><span class="p">)</span>
+<div class="viewcode-block" id="max_step"><a class="viewcode-back" href="../modules.html#parameters.max_step">[docs]</a><span class="k">def</span> <span class="nf">max_step</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Longest step for a channel in dt.  The timestep will be reduced</span>
+<span class="sd">    to satisfy this constraint&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+
+</div>
+<span class="nd">@default</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+<div class="viewcode-block" id="end_with_reconnection"><a class="viewcode-back" href="../modules.html#parameters.end_with_reconnection">[docs]</a><span class="k">def</span> <span class="nf">end_with_reconnection</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; If true, finishes when a reconnection is detected &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s">&#39;true&#39;</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">strees 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

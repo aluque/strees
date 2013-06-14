@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>User guide &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="index.html" />
+    <link rel="next" title="Source code documentation" href="modules.html" />
+    <link rel="prev" title="strees: Simulation of 3d streamer trees" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="modules.html" title="Source code documentation"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="strees: Simulation of 3d streamer trees"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">strees 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="user-guide">
+<h1>User guide<a class="headerlink" href="#user-guide" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="required-python-libraries">
+<h3>Required Python libraries<a class="headerlink" href="#required-python-libraries" title="Permalink to this headline">¶</a></h3>
+<p><tt class="docutils literal"><span class="pre">strees</span></tt> uses some Python libraries for the numerical computations as well
+as its output format and plotting.  You have to have them installed and
+accesible to run <tt class="docutils literal"><span class="pre">strees</span></tt>:</p>
+<blockquote>
+<div><ul class="simple">
+<li>NumPy and SciPy.  See <a class="reference external" href="http://scipy.org/install.html">here</a> for installation instructions for your operating system.</li>
+<li><a class="reference external" href="http://matplotlib.org/">Matplotlib</a></li>
+<li><a class="reference external" href="http://code.google.com/p/h5py/">h5py</a></li>
+</ul>
+</div></blockquote>
+<p>For Linux and Mac OS X we recommend using the package repositories of your
+distribution or MacPorts/Homebrew for Macs.</p>
+</div>
+<div class="section" id="compilation">
+<h3>Compilation<a class="headerlink" href="#compilation" title="Permalink to this headline">¶</a></h3>
+<p><tt class="docutils literal"><span class="pre">strees</span></tt> is mostly written in Python but in order to speed up the code,
+C is used in the calculation of electrostatic interactions.  For this
+purpose we built the <em>mpolar</em> library, which implements both
+Fast Multipole Method (FMM) calculations and direct, <span class="math">\(O(N^2)\)</span>
+electrostatic computations.</p>
+<p>This means that you have to compile the C code to obtain a <tt class="docutils literal"><span class="pre">mpolar</span></tt>
+library.  You can do this by typing:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="n">make</span>
+</pre></div>
+</div>
+<p>from the <tt class="docutils literal"><span class="pre">/src</span></tt> sub-directory.</p>
+<p>Before you run the code, make sure that the <tt class="docutils literal"><span class="pre">mpolar</span></tt> library is accessible
+to the dynamic linker of your operating system.  In Linux you achive that with:</p>
+<div class="highlight-python"><pre>export LD_LIBRARY_PATH=/path/to/your/mpolar.so</pre>
+</div>
+<p>In Mac OS X, you do the same with:</p>
+<div class="highlight-python"><pre>export DYLD_LIBRARY_PATH=/path/to/your/mpolar.so</pre>
+</div>
+</div>
+</div>
+<div class="section" id="running-a-simulation">
+<h2>Running a simulation<a class="headerlink" href="#running-a-simulation" title="Permalink to this headline">¶</a></h2>
+<p>Once the code is set up, you use the script grow_tree.py to start a
+simulation:</p>
+<div class="highlight-python"><pre>python /path/to/grow_tree.py simulation.ini</pre>
+</div>
+<p>where the file <tt class="docutils literal"><span class="pre">simulation.ini</span></tt> contains the input parameters of the
+simulation.  See <tt class="xref doc docutils literal"><span class="pre">parameters</span></tt> for a list of all valid parameters with a
+short description.</p>
+</div>
+<div class="section" id="input-files">
+<h2>Input files<a class="headerlink" href="#input-files" title="Permalink to this headline">¶</a></h2>
+<p>Input files for the code are <tt class="docutils literal"><span class="pre">.ini</span></tt> files with key/value pairs.  Here is
+an example:</p>
+<div class="highlight-python"><pre>[global]
+run_name = %(input)s
+out_file = %(input_dir)s/%(run_name)s.h5
+desc = A canonical simulation with the standard parameter set
+
+[parameters]
+external_field = -1.5e6
+tip_mobility = 0.09
+end_time = 3.5e-07
+time_step = 2.5e-10
+branching_probability = 100.0
+branching_sigma = 0.0001
+conductor_thickness = 0.001
+conductance = 9.6e-07
+maxwell_factor = 9e9
+fmm_threshold = 500000
+max_charges_per_box = 200
+multipolar_terms = 10
+random_seed = 11
+electrode_geometry = planar</pre>
+</div>
+<p>The input file contains two sections:</p>
+<blockquote>
+<div><ul>
+<li><p class="first"><tt class="docutils literal"><span class="pre">[global]</span></tt> contains the parameters <tt class="docutils literal"><span class="pre">run_name</span></tt>, <tt class="docutils literal"><span class="pre">out_file</span></tt> and
+<tt class="docutils literal"><span class="pre">desc</span></tt>.  In this section you can use substitutions.  The code
+provides substitutions variables</p>
+<blockquote>
+<div><ul class="simple">
+<li><tt class="docutils literal"><span class="pre">%(input)</span></tt>, containing the <em>basename</em> of the input file (i.e.
+if the input file is <tt class="docutils literal"><span class="pre">simulation.ini</span></tt> <tt class="docutils literal"><span class="pre">%(input)</span></tt> is replaced
+by <tt class="docutils literal"><span class="pre">simulation</span></tt>.</li>
+<li><tt class="docutils literal"><span class="pre">%(input_dir)</span></tt> is replaced by the directory containing the input
+file.</li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">[parameters]</span></tt> contains all other parameters.  In general you can
+specify these parameters in any unit system.  In the example above
+we used SI units, so we set <tt class="docutils literal"><span class="pre">maxwel_factor=9e9</span></tt>.  This is
+<span class="math">\(1/4\pi \varepsilon_0\)</span>.</p>
+</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="output-files">
+<h2>Output files<a class="headerlink" href="#output-files" title="Permalink to this headline">¶</a></h2>
+<p>The code produces a single output file per simulation, specified
+in the <a class="reference internal" href="modules.html#parameters.out_file" title="parameters.out_file"><tt class="xref py py-func docutils literal"><span class="pre">parameters.out_file()</span></tt></a> parameter.  The output is a
+<a class="reference external" href="http://www.hdfgroup.org/HDF5/">HDF5</a> file, organized as follows:</p>
+<p>The file contains a single group, called <tt class="docutils literal"><span class="pre">main</span></tt>.  This group contains
+attributes containing the input parameters used in the simulation as well
+as information about the running environment:</p>
+<dl class="docutils">
+<dt><tt class="docutils literal"><span class="pre">command</span></tt></dt>
+<dd>The command that was used to start the simulation.</dd>
+<dt><tt class="docutils literal"><span class="pre">timestamp</span></tt></dt>
+<dd>The machine time when the simulation was started.</dd>
+<dt><tt class="docutils literal"><span class="pre">ctime</span></tt></dt>
+<dd>Human-readable version of <tt class="docutils literal"><span class="pre">timestamp</span></tt></dd>
+<dt><tt class="docutils literal"><span class="pre">user</span></tt></dt>
+<dd>Login name of the user that run the simulation.</dd>
+<dt><tt class="docutils literal"><span class="pre">hostname</span></tt></dt>
+<dd>The name of the computer where the simulation run,</dd>
+</dl>
+<p>The group <tt class="docutils literal"><span class="pre">main</span></tt> contains
+a sub-group per saved timestep, with names <tt class="docutils literal"><span class="pre">00000</span></tt>, <tt class="docutils literal"><span class="pre">00001</span></tt> and so forth.
+Each of these sub-groups contains a snapshot of the tree at the given time.
+The attributes of the groups are:</p>
+<dl class="docutils">
+<dt><tt class="docutils literal"><span class="pre">t</span></tt></dt>
+<dd>Simulated time of the snapshot.</dd>
+<dt><tt class="docutils literal"><span class="pre">timestamp</span></tt></dt>
+<dd>Machine time when the snapshot was saved</dd>
+</dl>
+<p>The data is contained in these fields:</p>
+<dl class="docutils">
+<dt><tt class="docutils literal"><span class="pre">r</span></tt></dt>
+<dd>An <span class="math">\(N \times 3\)</span> array containing the locations of all nodes
+<span class="math">\(i, i=0, 1, \dots N-1\)</span>.</dd>
+<dt><tt class="docutils literal"><span class="pre">q</span></tt></dt>
+<dd>The charge of each node.</dd>
+<dt><tt class="docutils literal"><span class="pre">phi</span></tt></dt>
+<dd>The electrostatic potential of each node.</dd>
+<dt><tt class="docutils literal"><span class="pre">parents</span></tt></dt>
+<dd>An array containing the index of the parent node of each node.  The parent
+node is the immediate one further up the tree.</dd>
+<dt><tt class="docutils literal"><span class="pre">error</span></tt></dt>
+<dd>An estimation of the numerical error in the potentials <span class="math">\(\phi\)</span>.</dd>
+<dt><tt class="docutils literal"><span class="pre">error_dq</span></tt></dt>
+<dd>An estimation of the numerical error in <span class="math">\(dq_i/dt\)</span></dd>
+</dl>
+</div>
+<div class="section" id="plotting">
+<h2>Plotting<a class="headerlink" href="#plotting" title="Permalink to this headline">¶</a></h2>
+<p>The script <tt class="docutils literal"><span class="pre">plotter.py</span></tt> can be used to plot the results of a
+simulation for a quick inspection.  Use it with:</p>
+<div class="highlight-python"><pre>python /path/to/plotter.py outputfile.h5 [steps] [options]</pre>
+</div>
+<p>Where</p>
+<blockquote>
+<div><ul>
+<li><p class="first"><tt class="docutils literal"><span class="pre">step</span></tt> indicates the step that you want to plot, such as <tt class="docutils literal"><span class="pre">00300</span></tt>.
+You can also specify <tt class="docutils literal"><span class="pre">latest</span></tt> to see the latest snapshot.  If you
+do not provide a step, the program will plot <em>all</em> the available steps.</p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">options</span></tt> stands for a combination of these options:</p>
+<blockquote>
+<div><dl class="docutils">
+<dt><tt class="docutils literal"><span class="pre">-h,</span> <span class="pre">--help</span></tt></dt>
+<dd><p class="first last">Show a help message and exit.</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--ref=REF</span></tt></dt>
+<dd><p class="first last">The reference step</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--show</span></tt></dt>
+<dd><p class="first last">Open the matplotlib window?</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--field</span></tt></dt>
+<dd><p class="first last">Plot the electric field instead of the charge?</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--print-parameters</span></tt></dt>
+<dd><p class="first last">The reference step</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--print-times</span></tt></dt>
+<dd><p class="first last">Print real and simulated times for each step</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--format=FORMAT</span></tt></dt>
+<dd><p class="first last">Format of the output figures</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--single</span></tt></dt>
+<dd><p class="first last">Plot only one projection</p>
+</dd>
+<dt><tt class="docutils literal"><span class="pre">--axisbg=AXISBG</span></tt></dt>
+<dd><p class="first last">Background color</p>
+</dd>
+</dl>
+</div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+<p>If you do not set the <tt class="docutils literal"><span class="pre">--show</span></tt> option, the code will produce an output
+file named <tt class="docutils literal"><span class="pre">outputfile/outputfile_XXXXX.png</span></tt>, where <em>XXXXX</em> is the step
+index.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">User guide</a><ul>
+<li><a class="reference internal" href="#installation">Installation</a><ul>
+<li><a class="reference internal" href="#required-python-libraries">Required Python libraries</a></li>
+<li><a class="reference internal" href="#compilation">Compilation</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#running-a-simulation">Running a simulation</a></li>
+<li><a class="reference internal" href="#input-files">Input files</a></li>
+<li><a class="reference internal" href="#output-files">Output files</a></li>
+<li><a class="reference internal" href="#plotting">Plotting</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">strees: Simulation of 3d streamer trees</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="modules.html"
+                        title="next chapter">Source code documentation</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/usage.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="modules.html" title="Source code documentation"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="strees: Simulation of 3d streamer trees"
+             >previous</a> |</li>
+        <li><a href="index.html">strees 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,782 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Source code documentation &mdash; strees 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="strees 1.0 documentation" href="index.html" />
+    <link rel="prev" title="User guide" href="usage.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="usage.html" title="User guide"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">strees 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="source-code-documentation">
+<h1>Source code documentation<a class="headerlink" href="#source-code-documentation" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-grow_tree">
+<span id="grow-tree-py-module"></span><h2>grow_tree.py module<a class="headerlink" href="#module-grow_tree" title="Permalink to this headline">¶</a></h2>
+<p>grow_tree.py is the main module of the code and the one you invoke from
+the command line to start a simulation.</p>
+<p>To start a simulation with parameters read from a file simulation.ini
+simply invoke this module as:</p>
+<div class="highlight-python"><pre>python grow_tree.py simulation.ini</pre>
+</div>
+<p>The output will be written in a file name simulation.h5 with a 
+<a class="reference external" href="http://www.hdfgroup.org/HDF5//">HDF5</a> format.</p>
+<dl class="function">
+<dt id="grow_tree.adapt_step">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">adapt_step</tt><big>(</big><em>tr</em>, <em>r0</em>, <em>q0</em>, <em>dt</em>, <em>p=0.0</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#adapt_step"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.adapt_step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a step of duration dt but divides it into sub steps
+to make sure that the length of a channel is never longer than <tt class="docutils literal"><span class="pre">MAX_STEP</span></tt>.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.external_field">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">external_field</tt><big>(</big><em>r</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#external_field"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.external_field" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the external field at points <em>r</em>.  This is calculated
+from <tt class="docutils literal"><span class="pre">EXTERNAL_FIELD</span></tt> and <tt class="docutils literal"><span class="pre">ELECTRODE_POTENTIAL</span></tt>.  As the code stands now
+only these two possibilities are physically meaningful:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li>Specify <tt class="docutils literal"><span class="pre">EXTERNAL_FIELD</span></tt> with a planar electrode or with no electrode,
+but use <tt class="docutils literal"><span class="pre">ELECTRODE_POTENTIAL=0</span></tt>.</li>
+<li><tt class="docutils literal"><span class="pre">ELECTRODE_POTENTIAL</span> <span class="pre">!=</span> <span class="pre">0</span></tt>, but <tt class="docutils literal"><span class="pre">ELECTRODE_GEOMETRY</span> <span class="pre">=</span> <span class="pre">'sphere'</span></tt> and
+<tt class="docutils literal"><span class="pre">EXTERNAL_FIELD</span> <span class="pre">=</span> <span class="pre">0</span></tt>.</li>
+</ol>
+</div></blockquote>
+<p>However, we allow the user to shoot himself on his foot, so he can
+select any arbitrary combination of these parameters.  Beware.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.external_potential">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">external_potential</tt><big>(</big><em>r</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#external_potential"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.external_potential" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the external potential at points <em>r</em>.  See above, in
+external_field for the risks here.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.init_electrode">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">init_electrode</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/grow_tree.html#init_electrode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.init_electrode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Uses the input parameters to select an electrode geometry.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.init_from_scratch">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">init_from_scratch</tt><big>(</big><em>n=0</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#init_from_scratch"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.init_from_scratch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Init a &#8216;tree&#8217; with the root node plus n additional nodes in a vertical 
+string.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.main">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">main</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/grow_tree.html#main"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>This is the main function of the code it is the starting point of
+a simulation.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.rand">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">rand</tt><big>(</big><em>d0</em>, <em>d1</em>, <em>...</em>, <em>dn</em><big>)</big><a class="headerlink" href="#grow_tree.rand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Random values in a given shape.</p>
+<p>Create an array of the given shape and propagate it with
+random samples from a uniform distribution
+over <tt class="docutils literal"><span class="pre">[0,</span> <span class="pre">1)</span></tt>.</p>
+<dl class="docutils">
+<dt>d0, d1, ..., dn <span class="classifier-delimiter">:</span> <span class="classifier">int, optional</span></dt>
+<dd>The dimensions of the returned array, should all be positive.
+If no argument is given a single Python float is returned.</dd>
+</dl>
+<dl class="docutils">
+<dt>out <span class="classifier-delimiter">:</span> <span class="classifier">ndarray, shape <tt class="docutils literal"><span class="pre">(d0,</span> <span class="pre">d1,</span> <span class="pre">...,</span> <span class="pre">dn)</span></tt></span></dt>
+<dd>Random values.</dd>
+</dl>
+<p>random</p>
+<p>This is a convenience function. If you want an interface that
+takes a shape-tuple as the first argument, refer to
+np.random.random_sample .</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<span class="go">array([[ 0.14022471,  0.96360618],  #random</span>
+<span class="go">       [ 0.37601032,  0.25528411],  #random</span>
+<span class="go">       [ 0.49313049,  0.94909878]]) #random</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.randn">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">randn</tt><big>(</big><em>d0</em>, <em>d1</em>, <em>...</em>, <em>dn</em><big>)</big><a class="headerlink" href="#grow_tree.randn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a sample (or samples) from the &#8220;standard normal&#8221; distribution.</p>
+<p>If positive, int_like or int-convertible arguments are provided,
+<cite>randn</cite> generates an array of shape <tt class="docutils literal"><span class="pre">(d0,</span> <span class="pre">d1,</span> <span class="pre">...,</span> <span class="pre">dn)</span></tt>, filled
+with random floats sampled from a univariate &#8220;normal&#8221; (Gaussian)
+distribution of mean 0 and variance 1 (if any of the <span class="math">\(d_i\)</span> are
+floats, they are first converted to integers by truncation). A single
+float randomly sampled from the distribution is returned if no
+argument is provided.</p>
+<p>This is a convenience function.  If you want an interface that takes a
+tuple as the first argument, use <cite>numpy.random.standard_normal</cite> instead.</p>
+<dl class="docutils">
+<dt>d0, d1, ..., dn <span class="classifier-delimiter">:</span> <span class="classifier">int, optional</span></dt>
+<dd>The dimensions of the returned array, should be all positive.
+If no argument is given a single Python float is returned.</dd>
+</dl>
+<dl class="docutils">
+<dt>Z <span class="classifier-delimiter">:</span> <span class="classifier">ndarray or float</span></dt>
+<dd>A <tt class="docutils literal"><span class="pre">(d0,</span> <span class="pre">d1,</span> <span class="pre">...,</span> <span class="pre">dn)</span></tt>-shaped array of floating-point samples from
+the standard normal distribution, or a single such float if
+no parameters were supplied.</dd>
+</dl>
+<p>random.standard_normal : Similar, but takes a tuple as its argument.</p>
+<p>For random samples from <span class="math">\(N(\mu, \sigma^2)\)</span>, use:</p>
+<p><tt class="docutils literal"><span class="pre">sigma</span> <span class="pre">*</span> <span class="pre">np.random.randn(...)</span> <span class="pre">+</span> <span class="pre">mu</span></tt></p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">()</span>
+<span class="go">2.1923875335537315 #random</span>
+</pre></div>
+</div>
+<p>Two-by-four array of samples from N(3, 6.25):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="mf">2.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span>
+<span class="go">array([[-4.49401501,  4.00950034, -1.81814867,  7.29718677],  #random</span>
+<span class="go">       [ 0.39924804,  4.68456316,  4.99394529,  4.84057254]]) #random</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.relax">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">relax</tt><big>(</big><em>box</em>, <em>tr</em>, <em>r</em>, <em>q0</em>, <em>dt</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#relax"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.relax" title="Permalink to this definition">¶</a></dt>
+<dd><p>Relax the conductor <a class="reference internal" href="#tree.Tree" title="tree.Tree"><tt class="xref py py-class docutils literal"><span class="pre">tree.Tree</span></tt></a> <em>tr</em> for a time <em>dt</em>.</p>
+<p>Arguments:</p>
+<blockquote>
+<div><ul class="simple">
+<li><em>tr</em>: the <a class="reference internal" href="#tree.Tree" title="tree.Tree"><tt class="xref py py-class docutils literal"><span class="pre">tree.Tree</span></tt></a> instance containing the tree structure.</li>
+<li><em>r</em>: an array containing the node locations.</li>
+<li><em>q0</em>: an array containing the charges of the nodes.</li>
+<li><em>dt</em>: the time step.</li>
+</ul>
+</div></blockquote>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.seed">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">seed</tt><big>(</big><em>seed=None</em><big>)</big><a class="headerlink" href="#grow_tree.seed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Seed the generator.</p>
+<p>This method is called when <cite>RandomState</cite> is initialized. It can be
+called again to re-seed the generator. For details, see <cite>RandomState</cite>.</p>
+<dl class="docutils">
+<dt>seed <span class="classifier-delimiter">:</span> <span class="classifier">int or array_like, optional</span></dt>
+<dd>Seed for <cite>RandomState</cite>.</dd>
+</dl>
+<p>RandomState</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.self_fields">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">self_fields</tt><big>(</big><em>tr</em>, <em>r</em>, <em>q</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#self_fields"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.self_fields" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the fields created by the charges at the streamer tips
+on themselves.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.step">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">step</tt><big>(</big><em>tr</em>, <em>r</em>, <em>q0</em>, <em>dt</em>, <em>p=0.0</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#step"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs an elementary step, including relaxation and advancing
+the channels.</p>
+<p>Arguments:</p>
+<blockquote>
+<div><ul class="simple">
+<li><em>tr</em>: the <a class="reference internal" href="#tree.Tree" title="tree.Tree"><tt class="xref py py-class docutils literal"><span class="pre">tree.Tree</span></tt></a> instance containing the tree structure.</li>
+<li><em>r</em>: an array containing the node locations.</li>
+<li><em>q0</em>: an array containing the charges of the nodes.</li>
+<li><em>dt</em>: the time step.</li>
+</ul>
+</div></blockquote>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.symmetric_gaussian">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">symmetric_gaussian</tt><big>(</big><em>dr</em>, <em>sigma</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#symmetric_gaussian"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.symmetric_gaussian" title="Permalink to this definition">¶</a></dt>
+<dd><p>Samples a branch from a symmetric, gaussian branching model.
+In a plane perpendicular to dr we sample dr1 from a cylindrically
+symmetric gaussian distribution; the two branching points are dr1 and
+its symmetric vector wrt dr.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="grow_tree.velocities">
+<tt class="descclassname">grow_tree.</tt><tt class="descname">velocities</tt><big>(</big><em>box</em>, <em>tr</em>, <em>r</em>, <em>q</em><big>)</big><a class="reference internal" href="_modules/grow_tree.html#velocities"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#grow_tree.velocities" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the electric fields at the tips of the tree and from
+them obtains the propagation velocities of the <em>streamers</em></p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-parameters">
+<span id="parameters-py-module"></span><h2>parameters.py module<a class="headerlink" href="#module-parameters" title="Permalink to this headline">¶</a></h2>
+<p>This is the parameter description file.  Basically it provides a namespace
+where we store a function per input parameter.  Each function receives a string
+and is responsible for converting to the appropriate type, checking for
+allowed values.  The docstring of the function is a description of the
+parameter.</p>
+<dl class="function">
+<dt id="parameters.branch_in_xz">
+<tt class="descclassname">parameters.</tt><tt class="descname">branch_in_xz</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#branch_in_xz"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.branch_in_xz" title="Permalink to this definition">¶</a></dt>
+<dd><p>If true, branches always within the XZ plane.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.desc">
+<tt class="descclassname">parameters.</tt><tt class="descname">desc</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#desc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.desc" title="Permalink to this definition">¶</a></dt>
+<dd><p>A comment to describe this simulation.  It is ignored by the code.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.dummy">
+<tt class="descclassname">parameters.</tt><tt class="descname">dummy</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#dummy"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.dummy" title="Permalink to this definition">¶</a></dt>
+<dd><p>This parameter is completely ignored.  It is used only to produce
+series of identical runs.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.electrode_geometry">
+<tt class="descclassname">parameters.</tt><tt class="descname">electrode_geometry</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#electrode_geometry"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.electrode_geometry" title="Permalink to this definition">¶</a></dt>
+<dd><p>The electrode geometry.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.electrode_potential">
+<tt class="descclassname">parameters.</tt><tt class="descname">electrode_potential</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#electrode_potential"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.electrode_potential" title="Permalink to this definition">¶</a></dt>
+<dd><p>Electrostatic potential of a (spherical) electrode.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.end_with_reconnection">
+<tt class="descclassname">parameters.</tt><tt class="descname">end_with_reconnection</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#end_with_reconnection"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.end_with_reconnection" title="Permalink to this definition">¶</a></dt>
+<dd><p>If true, finishes when a reconnection is detected</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.external_field">
+<tt class="descclassname">parameters.</tt><tt class="descname">external_field</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#external_field"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.external_field" title="Permalink to this definition">¶</a></dt>
+<dd><p>Externally applied electric field in the z direction.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.fixed_branching_angle">
+<tt class="descclassname">parameters.</tt><tt class="descname">fixed_branching_angle</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#fixed_branching_angle"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.fixed_branching_angle" title="Permalink to this definition">¶</a></dt>
+<dd><p>If nonzero, fixes the angle between sibling branches.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.max_step">
+<tt class="descclassname">parameters.</tt><tt class="descname">max_step</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#max_step"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.max_step" title="Permalink to this definition">¶</a></dt>
+<dd><p>Longest step for a channel in dt.  The timestep will be reduced
+to satisfy this constraint</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.out_file">
+<tt class="descclassname">parameters.</tt><tt class="descname">out_file</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#out_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.out_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>File name (including path) of the .h5 output file.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.random_seed">
+<tt class="descclassname">parameters.</tt><tt class="descname">random_seed</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#random_seed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.random_seed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Seed for the random generator. If &lt; 0 the system time is used (default).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.run_name">
+<tt class="descclassname">parameters.</tt><tt class="descname">run_name</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#run_name"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.run_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Name of the run.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="parameters.single_branching_z">
+<tt class="descclassname">parameters.</tt><tt class="descname">single_branching_z</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/parameters.html#single_branching_z"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#parameters.single_branching_z" title="Permalink to this definition">¶</a></dt>
+<dd><p>If nonzero, performs a single branching at the given z.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-tree">
+<span id="tree-py-module"></span><h2>tree.py module<a class="headerlink" href="#module-tree" title="Permalink to this headline">¶</a></h2>
+<p>This module contains the data representation for the structure of trees.
+Note that we separate the structure of the branched tree from its
+realization, that would contain things such as charges, positions, etc.
+that evolve even when the structure is fixed.</p>
+<dl class="class">
+<dt id="tree.Segment">
+<em class="property">class </em><tt class="descclassname">tree.</tt><tt class="descname">Segment</tt><a class="reference internal" href="_modules/tree.html#Segment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>This is class of the segments composing a <a class="reference internal" href="#tree.Tree" title="tree.Tree"><tt class="xref py py-class docutils literal"><span class="pre">Tree</span></tt></a>.</p>
+<dl class="method">
+<dt id="tree.Segment.add_child">
+<tt class="descname">add_child</tt><big>(</big><em>other</em><big>)</big><a class="reference internal" href="_modules/tree.html#Segment.add_child"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Segment.add_child" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adds the <a class="reference internal" href="#tree.Segment" title="tree.Segment"><tt class="xref py py-class docutils literal"><span class="pre">Segment</span></tt></a> <em>other</em> as a child of this segment.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Segment.get">
+<tt class="descname">get</tt><big>(</big><em>a</em><big>)</big><a class="reference internal" href="_modules/tree.html#Segment.get"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Segment.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets the value in array a corresponding to this segment.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Segment.iter_adjacent">
+<tt class="descname">iter_adjacent</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/tree.html#Segment.iter_adjacent"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Segment.iter_adjacent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterates over all adjacent segments, including parent and
+children (if any).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Segment.set">
+<tt class="descname">set</tt><big>(</big><em>a</em>, <em>value</em><big>)</big><a class="reference internal" href="_modules/tree.html#Segment.set"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Segment.set" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the value in array a corresponding to this segment.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="tree.Tree">
+<em class="property">class </em><tt class="descclassname">tree.</tt><tt class="descname">Tree</tt><a class="reference internal" href="_modules/tree.html#Tree"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree" title="Permalink to this definition">¶</a></dt>
+<dd><p>Instances of the Tree class contain the topological information
+of a tree discharge: i.e. they encapsulate the relations between different
+segments in a tree but not about locations, conductivities etc..</p>
+<dl class="method">
+<dt id="tree.Tree.add_segment">
+<tt class="descname">add_segment</tt><big>(</big><em>segment</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.add_segment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.add_segment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adds a <em>segment</em> to this tree.  Returns the index of the segment
+inside the tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.branch_distance">
+<tt class="descname">branch_distance</tt><big>(</big><em>endpoints</em>, <em>dist=None</em>, <em>segment=None</em>, <em>lengths=None</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.branch_distance"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.branch_distance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array with the distance of each node from the
+branching immediately above it. The distance is calculated along the
+branch.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.branch_label">
+<tt class="descname">branch_label</tt><big>(</big><em>labels=None</em>, <em>label=1</em>, <em>segment=None</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.branch_label"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.branch_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array with an integer for each node that is unique
+for the branch where it sits.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.branches">
+<tt class="descname">branches</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.branches"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.branches" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds all indices of segments that branch in the tree</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.extend">
+<tt class="descname">extend</tt><big>(</big><em>indices</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.extend"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.extend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extends the tree adding one children to each segment indexed
+by <em>indices</em>, in that order.  This is used to extend a propagating tree.</p>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="tree.Tree.from_parents">
+<em class="property">static </em><tt class="descname">from_parents</tt><big>(</big><em>parents</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.from_parents"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.from_parents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a tree from a list of the parent indices.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.lengths">
+<tt class="descname">lengths</tt><big>(</big><em>endpoints</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.lengths"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.lengths" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array with the segment lengths of the tree, given
+an array with the <em>endpoints</em>.</p>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="tree.Tree.loadtxt">
+<em class="property">static </em><tt class="descname">loadtxt</tt><big>(</big><em>fname</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.loadtxt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.loadtxt" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a tree structure from a txt file [DEBUG].</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.make_root">
+<tt class="descname">make_root</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.make_root"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.make_root" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a segment node to be root of this tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.midpoints">
+<tt class="descname">midpoints</tt><big>(</big><em>endpoints</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.midpoints"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.midpoints" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array with the segment midpoints of the tree, given
+an array with the <em>endpoints</em>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.ohm_matrix">
+<tt class="descname">ohm_matrix</tt><big>(</big><em>endpoints</em>, <em>fix=</em><span class="optional">[</span><span class="optional">]</span><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.ohm_matrix"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.ohm_matrix" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a matrix M that will provide the evolution of charges
+in every segment of the tree as dq/dt = M . phi, where phi is
+the potential at the center of each segment and &#8216;.&#8217; is the dot product.
+This function builds the matrix from scratch.  Usually it is much
+better to keep updating the matrix as the tree grows.</p>
+<ul class="simple">
+<li><em>endpoints</em> must contain an array with the endpoints.</li>
+<li><em>fix</em> contains an array with indices of nodes with a fixed charge.
+usually that means the root node.</li>
+</ul>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.parents">
+<tt class="descname">parents</tt><big>(</big><em>root_index=0</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.parents"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.parents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds an array with the indices to each segment&#8217;s parent.
+The root segment gets an index <em>root_index</em>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.reconnects">
+<tt class="descname">reconnects</tt><big>(</big><em>endpoints</em>, <em>rmin=0.0005</em>, <em>dmin=0.001</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.reconnects"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.reconnects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds reconnections in a tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.save">
+<tt class="descname">save</tt><big>(</big><em>fname</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.save"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the tree structure into file fname.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.terminals">
+<tt class="descname">terminals</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.terminals"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.terminals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds all segments contained in the tree that do not
+have any children. Returns an array with segment indices.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="tree.Tree.zeros">
+<tt class="descname">zeros</tt><big>(</big><em>dim=None</em><big>)</big><a class="reference internal" href="_modules/tree.html#Tree.zeros"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.Tree.zeros" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an array that can hold all the data needed for a variable
+in this tree&#8217;s segments.  For multi-dimension data, use <em>dim</em>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="tree.random_branching_tree">
+<tt class="descclassname">tree.</tt><tt class="descname">random_branching_tree</tt><big>(</big><em>n</em>, <em>p</em><big>)</big><a class="reference internal" href="_modules/tree.html#random_branching_tree"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.random_branching_tree" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a branched tree of n segments where every segment has a
+probability p of having two descendants.  This produces nice pictures
+and can be useful for testing.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="tree.sample_endpoints">
+<tt class="descclassname">tree.</tt><tt class="descname">sample_endpoints</tt><big>(</big><em>tree</em><big>)</big><a class="reference internal" href="_modules/tree.html#sample_endpoints"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#tree.sample_endpoints" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gives endpoints to a tree structure.  Useful for plotting sample
+trees [DEBUG].</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="tree.uniform">
+<tt class="descclassname">tree.</tt><tt class="descname">uniform</tt><big>(</big><big>)</big><a class="headerlink" href="#tree.uniform" title="Permalink to this definition">¶</a></dt>
+<dd><p>random() -&gt; x in the interval [0, 1).</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-refinement">
+<span id="refinement-py-module"></span><h2>refinement.py module<a class="headerlink" href="#module-refinement" title="Permalink to this headline">¶</a></h2>
+<p>This module implement the structure of oct-trees for the implementation
+of the Fast Multipolar Method (FMM).</p>
+<p>. note:</p>
+<div class="highlight-python"><pre>Most of this code is not used, since we disabled the use of the FMM for
+the simulations reported in the paper.  However, the simulated tree is
+embedded in a bounding box defined by a :class:`Box` instance.</pre>
+</div>
+<dl class="class">
+<dt id="refinement.Box">
+<em class="property">class </em><tt class="descclassname">refinement.</tt><tt class="descname">Box</tt><big>(</big><em>r0</em>, <em>r1</em>, <em>parent=None</em>, <em>rel_coords=None</em>, <em>electrode=None</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class of 3d boxes.  Each box can be linked to a set of charges.</p>
+<dl class="method">
+<dt id="refinement.Box.build_lists">
+<tt class="descname">build_lists</tt><big>(</big><em>recurse=False</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.build_lists"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.build_lists" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds the lists of near-neighbours and the interaction list
+of this box.  Assumes that the near-neighbours are already calculated
+up in the tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.collect">
+<tt class="descname">collect</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.collect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.collect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Collects the multipolar expansions of this box&#8217;s children,
+translate them to the center and sums them.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.collect_inward">
+<tt class="descname">collect_inward</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.collect_inward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.collect_inward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the inward (local) expansions of all boxes in the
+interaction list and adds them.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.collect_solutions">
+<tt class="descname">collect_solutions</tt><big>(</big><em>field=False</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.collect_solutions"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.collect_solutions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Collects the solution for each of the box&#8217;s children.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.downward">
+<tt class="descname">downward</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.downward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.downward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs the &#8220;Downward Pass&#8221; of the Greengard papers.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.eval_subtree">
+<tt class="descname">eval_subtree</tt><big>(</big><em>other</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.eval_subtree"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.eval_subtree" title="Permalink to this definition">¶</a></dt>
+<dd><p>DEBUG purposes only.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.expand">
+<tt class="descname">expand</tt><big>(</big><em>p</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.expand"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.expand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Directly calculates the multipolar expansion of this box
+around its center.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.is_near_neighbour">
+<tt class="descname">is_near_neighbour</tt><big>(</big><em>other</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.is_near_neighbour"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.is_near_neighbour" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks whether other is a near neighbour of this box.
+Note that they must belong to the same oct-tree or the algorithm
+fails.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.refine">
+<tt class="descname">refine</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.refine"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.refine" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates the 8 children of the box.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.set_charges">
+<tt class="descname">set_charges</tt><big>(</big><em>r</em>, <em>q</em>, <em>max_charges=None</em>, <em>min_length=0</em>, <em>evaluation=True</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.set_charges"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.set_charges" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the charges of this box.
+If max_charges is not None, refines the box into smaller children
+until each leaf box contains no more than max_charges.
+If evaluation is true, assumes that the charge points will also
+be the evaluation points.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.set_evaluation">
+<tt class="descname">set_evaluation</tt><big>(</big><em>rv</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.set_evaluation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.set_evaluation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Recursively sets the points where the potential will be evaluated.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.set_field_evaluation">
+<tt class="descname">set_field_evaluation</tt><big>(</big><em>rf</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.set_field_evaluation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.set_field_evaluation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Recursively sets the points where the fields will be evaluated.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.solve">
+<tt class="descname">solve</tt><big>(</big><em>a</em>, <em>field=False</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.solve"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.solve" title="Permalink to this definition">¶</a></dt>
+<dd><p>Once we have the local expansion for the box and the list
+of near-neighbours, we can finally evaluate the potential.
+Note that generally this function is called only for leaf nodes.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.solve_all">
+<tt class="descname">solve_all</tt><big>(</big><em>a=0.0</em>, <em>**kwargs</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.solve_all"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.solve_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calls solve for the leaf nodes of the sub-tree rooted at self.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.update_charges">
+<tt class="descname">update_charges</tt><big>(</big><em>q</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.update_charges"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.update_charges" title="Permalink to this definition">¶</a></dt>
+<dd><p>Recursively re-set the charges contained in the box.  This
+keeps the refinement oct-tree.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="refinement.Box.upward">
+<tt class="descname">upward</tt><big>(</big><em>p</em><big>)</big><a class="reference internal" href="_modules/refinement.html#Box.upward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.Box.upward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Goes through the oct-tree.  For leaves of the tree, directly
+calculates the multipole expansion; for nodes with descendants
+calculates the expansion by adding the children&#8217;s expansion.
+This is called &#8220;Upward Pass&#8221; in the Greengard papers.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="refinement.containing_box">
+<tt class="descclassname">refinement.</tt><tt class="descname">containing_box</tt><big>(</big><em>r</em>, <em>electrode=None</em><big>)</big><a class="reference internal" href="_modules/refinement.html#containing_box"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#refinement.containing_box" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a Box object that contains all k points in r[3, k].
+The Box has to be a perfect cube for the FMM to work.
+If reflect is True, inludes also the reflection of all points
+over the z=0 plane.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-readinput">
+<span id="readinput-py-module"></span><h2>readinput.py module<a class="headerlink" href="#module-readinput" title="Permalink to this headline">¶</a></h2>
+<p>This is an auxiliary module for reading input .ini files.
+It is based on Python&#8217;s stdlib 
+<a class="reference external" href="http://docs.python.org/2/library/configparser.html/">ConfigParser</a></p>
+<p>This module also provides functionality for setting run sets where
+one or more of the parameters run over a list of values.</p>
+<dl class="function">
+<dt id="readinput.expand">
+<tt class="descclassname">readinput.</tt><tt class="descname">expand</tt><big>(</big><em>s</em>, <em>parser</em><big>)</big><a class="reference internal" href="_modules/readinput.html#expand"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.expand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expands special characters to produce e.g. lists of many parameters.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.expand_dict">
+<tt class="descclassname">readinput.</tt><tt class="descname">expand_dict</tt><big>(</big><em>d</em><big>)</big><a class="reference internal" href="_modules/readinput.html#expand_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.expand_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a dictionary that may contain a few lists as values and returns
+an iterator over dictionaries where each of these elements is iterated.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.expand_input">
+<tt class="descclassname">readinput.</tt><tt class="descname">expand_input</tt><big>(</big><em>ifile</em>, <em>parameters</em><big>)</big><a class="reference internal" href="_modules/readinput.html#expand_input"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.expand_input" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expands an input file by expanding some of its arguments.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.guess_type">
+<tt class="descclassname">readinput.</tt><tt class="descname">guess_type</tt><big>(</big><em>s</em><big>)</big><a class="reference internal" href="_modules/readinput.html#guess_type"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.guess_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts s into int or float if possible.  If not, leave it as a
+string. This will give us problems if the user wants to e.g. use
+filenames or run names that can be parser as a number.  So have to
+implement a better approach whereby parameter names are associated with
+types.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.load_input">
+<tt class="descclassname">readinput.</tt><tt class="descname">load_input</tt><big>(</big><em>fname</em>, <em>parameters</em>, <em>d=None</em>, <em>upper=False</em>, <em>raw=False</em><big>)</big><a class="reference internal" href="_modules/readinput.html#load_input"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.load_input" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads an input file and stores its values in the dictionary
+d.   If upper is true, transforms the parameter names to upper case.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.nonnegative">
+<tt class="descclassname">readinput.</tt><tt class="descname">nonnegative</tt><big>(</big><em>func</em><big>)</big><a class="reference internal" href="_modules/readinput.html#nonnegative"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.nonnegative" title="Permalink to this definition">¶</a></dt>
+<dd><p>A decorator to constraint the parameter to nonnegative values.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="readinput.positive">
+<tt class="descclassname">readinput.</tt><tt class="descname">positive</tt><big>(</big><em>func</em><big>)</big><a class="reference internal" href="_modules/readinput.html#positive"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#readinput.positive" title="Permalink to this definition">¶</a></dt>
+<dd><p>A decorator to constraint the parameter to positive values.</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Source code documentation</a><ul>
+<li><a class="reference internal" href="#module-grow_tree">grow_tree.py module</a></li>
+<li><a class="reference internal" href="#module-parameters">parameters.py module</a></li>
+<li><a class="reference internal" href="#module-tree">tree.py module</a></li>
+<li><a class="reference internal" href="#module-refinement">refinement.py module</a></li>
+<li><a class="reference internal" href="#module-readinput">readinput.py module</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="usage.html"
+                        title="previous chapter">User guide</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/modules.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="usage.html" title="User guide"
+             >previous</a> |</li>
+        <li><a href="index.html">strees 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Alejandro Luque.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

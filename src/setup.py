@@ -1,12 +1,14 @@
 #! /usr/bin/python
 
+import distutils.sysconfig
 from distutils.core import setup, Extension
+import numpy as np
 
 numod = Extension('mpolar',
                   sources = ['mpolarmod.c'],
                   extra_objects = ['misc.o', 'multipol.o', 'efield.o'],
-                  include_dirs = ['/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages/numpy/core/include/',
-                                  '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7/']
+                  include_dirs = [np.get_include(),
+                                  distutils.sysconfig.get_python_inc()]
                   )
 
 setup (ext_modules = [numod],

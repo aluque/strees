@@ -164,3 +164,39 @@ def max_step(s):
 def end_with_reconnection(s):
     """ If true, finishes when a reconnection is detected """
     return (s.lower() == 'true')
+
+
+#
+# Parameters for the simulation of sprites
+#
+@default(1e10)
+def scale_height(s):
+    """ Scale height of the densities. """
+    return float(s)
+
+@default(0.0)
+def tau_1(s):
+    """ Decay time scale of the cloud-to-ground current. """
+    return float(s)
+
+@default(0.0)
+def tau_2(s):
+    """ Rise time scale of the cloud-to-ground current. """
+    return float(s)
+
+@default(0.0)
+def ionosphere_height(s):
+    """ Altitude of the ionosphere (upper electrode). """
+    return float(s)
+
+@default(0.0)
+def charge_height(s):
+    """ Altitude of the cloud charge. """
+    return float(s)
+
+@default(0.0)
+def charge_total(s):
+    """ Total charge transferred in the CG stroke (<0 for a +CG, >0 for a -CG). """
+    return float(s)
+
+

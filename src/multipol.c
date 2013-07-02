@@ -731,6 +731,60 @@ mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
   return phi;
 }
 
+/* Same as above but we use a variable a that depends on the
+   source index. */
+mp_array *
+mp_direct_ap (mp_array *r, mp_array *q, mp_array *reval, mp_array *ap)
+{
+  int i, j;
+  mp_intp n, m;
+  double q0, x, y, z, dx, dy, dz, *phi_ptr;
+  mp_array *phi;
+
+  /* This is the number of charges; it is taken from q, so if r is
+     larger, the remaining charges are simply ignored. */
+  n = mp_array_dim (q, 0);
+
+  /* The number of evaluation points: */
+  m = mp_array_dim (reval, 0);
+
+  phi = (mp_array*) PyArray_ZEROS (1, &m, mp_DOUBLE, 0);
+
+  for (j = 0; j < m; j++) {
+    x = * (double*) mp_array_getptr2 (reval, j, X);
+    y = * (double*) mp_array_getptr2 (reval, j, Y);
+    z = * (double*) mp_array_getptr2 (reval, j, Z);
+    phi_ptr = (double*) mp_array_getptr1 (phi, j);
+
+    *phi_ptr = 0;
+
+    for (i = 0; i < n; i++) {
+      double rn;
+      double a;
+
+      dx = * (double*) mp_array_getptr2 (r, i, X) - x;
+      dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
+      dz = * (double*) mp_array_getptr2 (r, i, Z) - z;
+      q0 = * (double*) mp_array_getptr1 (q, i);
+      a  = * (double*) mp_array_getptr1 (ap, i);
+     
+      rn = sqrt(dx * dx + dy * dy + dz * dz);
+#ifndef MP_MATCHED_PHI
+      if (a > 0 || rn > 0.0) {
+	*phi_ptr += q0 / (rn + a);
+      }
+#else
+      if (rn > 2 * a) {
+      	*phi_ptr += q0 / rn;
+      } else {
+      	if (a > 0) *phi_ptr += q0 / (a + 0.5 * rn);
+      }
+#endif
+    }
+  }
+  return phi;
+}
+
 
 /* Calculates directly the electric field at reval created by 
    sources q located at r.
@@ -773,6 +827,63 @@ mp_field_direct (mp_array *r, mp_array *q, mp_array *reval, double a)
       dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
       dz = * (double*) mp_array_getptr2 (r, i, Z) - z;
       q0 = * (double*) mp_array_getptr1 (q, i);
+     
+      rn = sqrt(dx * dx + dy * dy + dz * dz);
+      
+      /* This is important since often the source and measuring points will be
+	 the same and we do not like infinities around here. */
+      if (rn > 0.0) {
+	*f_ptr_x -= dx * q0 / (rn * (rn + a) * (rn + a));
+	*f_ptr_y -= dy * q0 / (rn * (rn + a) * (rn + a));
+	*f_ptr_z -= dz * q0 / (rn * (rn + a) * (rn + a));
+      }
+    }
+  }
+
+  return field;
+}
+
+/* Same as above but again allowing a variable a that depends on source
+   index. */
+mp_array *
+mp_field_direct_ap (mp_array *r, mp_array *q, mp_array *reval, mp_array *ap)
+{
+  int i, j;
+  mp_intp n, m, dim[2];
+  double q0, x, y, z, dx, dy, dz, *f_ptr_x, *f_ptr_y, *f_ptr_z;
+  mp_array *field;
+
+  /* This is the number of charges; it is taken from q, so if r is
+     larger, the remaining charges are simply ignored. */
+  n = mp_array_dim (q, 0);
+
+  /* The number of evaluation points: */
+  m = mp_array_dim (reval, 0);
+
+  dim[0] = m;
+  dim[1] = 3;
+
+  field = (mp_array*) PyArray_ZEROS (2, dim, mp_DOUBLE, 0);
+
+  for (j = 0; j < m; j++) {
+    x = * (double*) mp_array_getptr2 (reval, j, X);
+    y = * (double*) mp_array_getptr2 (reval, j, Y);
+    z = * (double*) mp_array_getptr2 (reval, j, Z);
+
+    f_ptr_x = (double*) mp_array_getptr2 (field, j, X);
+    f_ptr_y = (double*) mp_array_getptr2 (field, j, Y);
+    f_ptr_z = (double*) mp_array_getptr2 (field, j, Z);
+
+    *f_ptr_x = *f_ptr_y = *f_ptr_z = 0;
+
+    for (i = 0; i < n; i++) {
+      double rn, a;
+
+      dx = * (double*) mp_array_getptr2 (r, i, X) - x;
+      dy = * (double*) mp_array_getptr2 (r, i, Y) - y;
+      dz = * (double*) mp_array_getptr2 (r, i, Z) - z;
+      q0 = * (double*) mp_array_getptr1 (q, i);
+      a  = * (double*) mp_array_getptr1 (ap, i);
      
       rn = sqrt(dx * dx + dy * dy + dz * dz);
       

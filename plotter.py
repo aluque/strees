@@ -26,8 +26,6 @@ class Plotter(object):
         self.fp = h5py.File(fname, "r")
         self.main = self.fp['main']
         self.run_name = self.main.attrs['run_name']
-        self.external_field = self.main.attrs['external_field']
-        self.external_field_vector = array([0.0, 0.0, self.external_field])
         self.conductor_thickness = self.main.attrs['conductor_thickness']
         self.ref_step = None
 
@@ -101,8 +99,6 @@ class Plotter(object):
 
         p, l, r, phi = p[:-n], l[:-n], r[:-n], phi[:-n]
         midpoints = midpoints[:-n]
-        
-        phi = phi - dot(r, self.external_field_vector)
         
         efields = (phi - phi[p]) / l
 

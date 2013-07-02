@@ -55,6 +55,7 @@ def main():
     # Load input parameters from the input file and add the, in allcaps
     # to the global namespace.
     global EXTERNAL_FIELD_VECTOR, ELECTRODE
+    global SPRITE_RS, SPRITE_QS
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
@@ -63,7 +64,11 @@ def main():
     
     EXTERNAL_FIELD_VECTOR = array([0.0, 0.0, EXTERNAL_FIELD])
     ELECTRODE = init_electrode()
-    
+
+    # Initialization of sprite fields
+    if SPRITES:
+        SPRITE_RS, SPRITE_QS = sprite_charge_sources()
+
     # init a tree from scratch
     tr, r0, q0 = init_from_scratch(INITIAL_NODES)
     
@@ -96,10 +101,14 @@ def main():
                     branch_prob = inf
                     branched = True
 
-        r, q = adapt_step(tr, r, q, dt, p=branch_prob)
+        r, q = adapt_step(tr, r, q, it, dt, p=branch_prob)
 
         with ContextTimer("saving %d" % i):
-            phi = solve_phi(r, q)
+            # Mon Jul  1 20:41:57 2013: COMPAT. BREAKING.
+            # From now on, I will store the full potential, not
+            # only the self-constistent potential, which only had
+            # sense when debugging.
+            phi = solve_phi(r, q) + external_potential(r, it)
             dfile.add_step(it, tr, r, q, phi,
                            error=error, error_dq=error_dq)
             
@@ -129,7 +138,7 @@ def init_from_scratch(n=0):
     return tr, r0, q0
 
     
-def adapt_step(tr, r0, q0, dt, p=0.0):
+def adapt_step(tr, r0, q0, t, dt, p=0.0):
     """ Performs a step of duration dt but divides it into sub steps
     to make sure that the length of a channel is never longer than ``MAX_STEP``.
     """
@@ -138,7 +147,7 @@ def adapt_step(tr, r0, q0, dt, p=0.0):
     remaining_steps = 1
     while remaining_steps > 0:
         try:
-            r, q = step(tr, r, q, current_dt, p=p) 
+            r, q = step(tr, r, q, t, current_dt, p=p) 
             remaining_steps -= 1
         except TooLongTimestep:
             current_dt /= 2.
@@ -146,7 +155,7 @@ def adapt_step(tr, r0, q0, dt, p=0.0):
     return r, q
 
 
-def step(tr, r, q0, dt, p=0.0):
+def step(tr, r, q0, t, dt, p=0.0):
     """ Performs an elementary step, including relaxation and advancing
     the channels. 
 
@@ -155,6 +164,8 @@ def step(tr, r, q0, dt, p=0.0):
       * *tr*: the :class:`tree.Tree` instance containing the tree structure.
       * *r*: an array containing the node locations.
       * *q0*: an array containing the charges of the nodes.
+      * *t*: Initial time of the time-step.  This is only used for time-
+             dependent fields.
       * *dt*: the time step.
 
     """
@@ -169,13 +180,13 @@ def step(tr, r, q0, dt, p=0.0):
     box.set_field_evaluation(r[iterm, :])
 
     # 1. Calculate the velocities at t
-    v0 = velocities(box, tr, r, q0)
+    v0 = velocities(box, tr, r, q0, t)
 
     # 2. Relax the tree from t to t + dt
-    q1 = relax(box, tr, r, q0, dt)
+    q1 = relax(box, tr, r, q0, t, dt)
 
     # 3. Calculate the velocities again at t + dt
-    v1 = velocities(box, tr, r, q1)
+    v1 = velocities(box, tr, r, q1, t)
 
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
@@ -188,7 +199,12 @@ def step(tr, r, q0, dt, p=0.0):
     if (max(vabs) * dt) > MAX_STEP:
         raise TooLongTimestep
 
-    does_branch = rand(*iterm.shape) < (p * vabs * dt)
+    if not SPRITES:
+        theta = 1
+    else:
+        theta = sprite_theta(r[iterm, :])
+
+    does_branch = rand(*iterm.shape) < (theta * p * vabs * dt)
 
     radv = empty((sum(does_branch) + sum(vabs > 0), 3))
     j = 0
@@ -201,7 +217,9 @@ def step(tr, r, q0, dt, p=0.0):
         else:
             # Note that slow channels, although unlikely, may branch.
             # However, not if their velocity is 0
-            dr1, dr2 = symmetric_gaussian(dt * v[i, :], BRANCHING_SIGMA)
+            factor = 1 if not SPRITES else 1 / theta[i]
+            dr1, dr2 = symmetric_gaussian(dt * v[i, :], 
+                                          factor * BRANCHING_SIGMA)
             radv[j, :] = r[iterm[i], :] + dr1
             radv[j + 1, :] = r[iterm[i], :] + dr2
             j += 2
@@ -215,7 +233,7 @@ def step(tr, r, q0, dt, p=0.0):
     return rnew, qnew
 
 
-def velocities(box, tr, r, q):
+def velocities(box, tr, r, q, t):
     """ Calculates the electric fields at the tips of the tree and from
     them obtains the propagation velocities of the *streamers* """
 
@@ -224,18 +242,28 @@ def velocities(box, tr, r, q):
     # When we have a single charge the velocity is simply given by the
     # external electric field
     if len(q) == 1:
-        return TIP_MOBILITY * external_field(r[iterm, :])
+        return TIP_MOBILITY * external_field(r[iterm, :], t)
     
-    box.update_charges(q)
-    box.upward(MULTIPOLAR_TERMS)
-    box.downward()
-    box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
+    if len(q) >= FMM_THRESHOLD and box is not None:
+        box.update_charges(q)
+        box.upward(MULTIPOLAR_TERMS)
+        box.downward()
+        box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
     
-    box.collect_solutions(field=True)
+        box.collect_solutions(field=True)
+        field = box.field
+    else:
+        if not SPRITES:
+            field = mpolar.field_direct(r, q, r[iterm, :], CONDUCTOR_THICKNESS)
+        else:
+            theta = sprite_theta(r)
+            field = mpolar.field_direct_ap(r, q, r[iterm, :], 
+                                           CONDUCTOR_THICKNESS / theta)
+
     sfields = self_fields(tr, r, q)
-    E = (MAXWELL_FACTOR * box.field
+    E = (MAXWELL_FACTOR * field
          + MAXWELL_FACTOR * sfields
-         + external_field(r[iterm, :]))
+         + external_field(r[iterm, :], t))
 
     absE = sqrt(sum(E**2, axis=1))
 
@@ -243,8 +271,13 @@ def velocities(box, tr, r, q):
     u = E / absE[:, newaxis]
 
     # Now we can calculate the absolute value of the velocity
-    vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD, absE - TIP_MIN_FIELD, 0)
-
+    if not SPRITES:
+        vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD, 
+                                    absE - TIP_MIN_FIELD, 0)
+    else:
+        theta = sprite_theta(r[iterm, :])
+        vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD * theta, 
+                                    absE - TIP_MIN_FIELD * theta, 0) / theta
     v = u * vabs[:, newaxis]
     
     return v
@@ -260,10 +293,12 @@ def self_fields(tr, r, q):
     dr = r[iterm, :] - r[parents, :]
     u = dr / (sqrt(sum(dr**2, axis=1)))[:, newaxis]
     
-    return q[iterm][:, newaxis] * u / CONDUCTOR_THICKNESS**2
+    theta2 = 1 if not SPRITES else sprite_theta(r[iterm, :])[:, newaxis]**2
+
+    return q[iterm][:, newaxis] * u / (CONDUCTOR_THICKNESS**2 / theta2)
 
 
-def relax(box, tr, r, q0, dt):
+def relax(box, tr, r, q0, t, dt):
     """ Relax the conductor :class:`tree.Tree` *tr* for a time *dt*. 
 
     Arguments:
@@ -271,6 +306,7 @@ def relax(box, tr, r, q0, dt):
       * *tr*: the :class:`tree.Tree` instance containing the tree structure.
       * *r*: an array containing the node locations.
       * *q0*: an array containing the charges of the nodes.
+      * *t*: Initial time of the time-step.
       * *dt*: the time step.
     """
     global latest_phi, error, error_dq
@@ -280,10 +316,15 @@ def relax(box, tr, r, q0, dt):
     # M to zero.  
     fix = [] if ELECTRODE is None else [0]
     
+    if SPRITES:
+        factor = 1 / sprite_theta(tr.midpoints(r))
+    else:
+        factor = None
+
     # On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know
     # where it comes from.  Probably it was a reliq of the mid-points approach
     # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
-    M = CONDUCTANCE * tr.ohm_matrix(r, fix=fix)
+    M = CONDUCTANCE * tr.ohm_matrix(r, factor=factor, fix=fix)
     n = len(q0)
     
     def f(t0, q):
@@ -295,7 +336,7 @@ def relax(box, tr, r, q0, dt):
         error = phi - latest_phi
         error_dq = M.dot(error)
         
-        dq = M.dot(phi + external_potential(r))
+        dq = M.dot(phi + external_potential(r, t + t0))
 
         return dq
 
@@ -325,8 +366,13 @@ def solve_phi(r, q, box=None):
         else:
             rx, qx = ELECTRODE.extend(r, q)
 
-        phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
-                                              CONDUCTOR_THICKNESS)
+        if not SPRITES:
+            phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
+                                                  CONDUCTOR_THICKNESS)
+        else:
+            theta = sprite_theta(rx)
+            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(rx, qx, r,
+                                                CONDUCTOR_THICKNESS / theta)
         phi = phi0
 
     return phi
@@ -370,7 +416,7 @@ def symmetric_gaussian(dr, sigma):
     return dr1, dr2
 
 
-def external_field(r):
+def external_field(r, t):
     """ Calculates the external field at points *r*.  This is calculated
     from ``EXTERNAL_FIELD`` and ``ELECTRODE_POTENTIAL``.  As the code stands now
     only these two possibilities are physically meaningful:
@@ -383,6 +429,9 @@ def external_field(r):
     However, we allow the user to shoot himself on his foot, so he can
     select any arbitrary combination of these parameters.  Beware.
     """
+    if SPRITES:
+        return sprite_field(r, t)
+
     field = EXTERNAL_FIELD_VECTOR[newaxis, :]
     
     if ELECTRODE_POTENTIAL == 0:
@@ -397,10 +446,13 @@ def external_field(r):
     return field
 
 
-def external_potential(r):
+def external_potential(r, t):
     """ Calculates the external potential at points *r*.  See above, in
     external_field for the risks here.
     """
+    if SPRITES:
+        return sprite_potential(r, t)
+
     phi = -dot(r, EXTERNAL_FIELD_VECTOR)
 
     if ELECTRODE_POTENTIAL == 0:
@@ -439,6 +491,77 @@ def init_electrode():
     except KeyError:
         raise KeyError("Electrode geometry '%s' not recognized"
                        % ELECTRODE_GEOMETRY)
+
+#
+#  SIMULATION OF SPRITE DISCHARGES:
+#  --------------------------------
+#  The simulation of sprites differs from 'standard' simulations in two
+#  aspects:
+#  1. We allow an inhomogeneous density and rescale the relevant
+#     streamer parameters accordingly
+#  2. As external field, we use the field created by a charge sitting
+#     between parallel electrodes.
+#
+#  Here we define the functions needed to implement this functionality.
+
+def sprite_theta(r):
+    """ Calculates the density ratio (theta=n(z)/n(0)) according
+    to ``SCALE_HEIGHT``. """
+    return exp(-r[:, 2] / SCALE_HEIGHT)
+
+
+def sprite_instant_charge(t):
+    """ Returns the cloud charge in a CG discharge at time t. """
+    return (CHARGE_TOTAL / (TAU_1 - TAU_2) 
+            * (+ TAU_2 * (exp(-t / TAU_2) - 1) 
+               - TAU_1 * (exp(-t / TAU_1) - 1)))
+
+
+def sprite_potential(r, t):
+    """ Calculates the potential created at *r* by a charge *qt* inside a 
+    parallel-plates capacitor. """
+    qt = sprite_instant_charge(t)
+    return MAXWELL_FACTOR * mpolar.direct(SPRITE_RS, qt * SPRITE_QS, r, 0.0)
+
+
+def sprite_field(r, t):
+    """ Calculates the field created at *r* by a charge *qt* inside a 
+    parallel-plates capacitor. """
+    qt = sprite_instant_charge(t)
+    return MAXWELL_FACTOR * mpolar.field_direct(SPRITE_RS, 
+                                                qt * SPRITE_QS, r, 0.0)
+
+
+def sprite_charge_sources():
+    """ Calculates the source charges of the applied field for sprite 
+    simulations.  These are the mirror charges of the charge in the cloud
+    created by reflections at the ground and the ionosphere. 
+    We use mirror charges and a total of ``4*CHARGE_REFLECTIONS`` reflections.
+    Returns *rs*, *qs*, where *rs* contains the charge locations
+    and *qs* the charge sign (i.e. you have to multiply *qs* by
+    q(t) to do anything meaningful. """
+
+    # Location of the source charges
+    # Source charge
+    z0 = -(IONOSPHERE_HEIGHT - CHARGE_HEIGHT)
+    
+    # First reflection
+    z1 = -z0
+
+    # Each +/- charge repeats with a period 2 * IONOSPHERE_HEIGHT
+    zpos = z0 + (2 * arange(-CHARGE_REFLECTIONS, CHARGE_REFLECTIONS + 1) 
+                 * IONOSPHERE_HEIGHT)
+    zneg = z1 + (2 * arange(-CHARGE_REFLECTIONS, CHARGE_REFLECTIONS + 1) 
+                 * IONOSPHERE_HEIGHT)
+    z = r_[zpos, zneg]
+
+    qs = r_[ones((len(zpos),)), -ones((len(zneg),))]
+    rs = zeros((len(z), 3))
+    rs[:, 2] = z
+    
+    return rs, qs
+
+
 
 
 def plot_projections(r, q):

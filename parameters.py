@@ -169,6 +169,11 @@ def end_with_reconnection(s):
 #
 # Parameters for the simulation of sprites
 #
+@default(False)
+def sprites(s):
+    """ If true, implements the sprite-simulation functionality. """
+    return (s.lower() == 'true')
+
 @default(1e10)
 def scale_height(s):
     """ Scale height of the densities. """
@@ -199,4 +204,7 @@ def charge_total(s):
     """ Total charge transferred in the CG stroke (<0 for a +CG, >0 for a -CG). """
     return float(s)
 
-
+@default(2)
+def charge_reflections(s):
+    """ Number of charge reflection of each sign in each direction. """
+    return int(s)

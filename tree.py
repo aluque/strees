@@ -112,7 +112,7 @@ class Tree(object):
         return 0.5 * (endpoints + endpoints[parents, :])
     
 
-    def ohm_matrix(self, endpoints, fix=[]):
+    def ohm_matrix(self, endpoints, factor=None, fix=[]):
         """ Builds a matrix M that will provide the evolution of charges
         in every segment of the tree as dq/dt = M . phi, where phi is
         the potential at the center of each segment and '.' is the dot product.
@@ -120,6 +120,9 @@ class Tree(object):
         better to keep updating the matrix as the tree grows.
 
         * *endpoints* must contain an array with the endpoints.
+        * *factor* if it is not ``None``, multiplies the conductivity
+          of each segment by this factor (it can be an array).  This is
+          used to simulate sprites.
         * *fix* contains an array with indices of nodes with a fixed charge.
           usually that means the root node.
         
@@ -127,6 +130,9 @@ class Tree(object):
         l = self.lengths(endpoints)
         linv = 1.0 / l
         
+        if factor is not None:
+            linv[:] = linv * factor
+
         # We build the matrix in LIL format first, later we convert to a
         # format more efficient for matrix-vector multiplications
         M = lil_matrix((self.n, self.n))

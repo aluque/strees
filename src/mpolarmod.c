@@ -12,11 +12,6 @@
 #define TRUE 1
 #define FALSE 0
 
-static double eval_expansion (int maxl, PyArrayObject *lm, 
-			      double x, double y, double z, int inout);
-static int iter_next (int nd, int *indices, int *shape);
-static char* element_dbl (PyArrayObject *ar, int *indxs);
-
 char *invok_name;
 
 static PyObject *
@@ -188,6 +183,52 @@ direct (PyObject *self, PyObject *args)
   return PyArray_Return (phi);
 }
 
+static PyObject *
+direct_ap (PyObject *self, PyObject *args)
+{
+  PyArrayObject *r, *q, *reval, *phi, *ap;
+
+  if (!PyArg_ParseTuple(args, "O!O!O!O!", 
+			&PyArray_Type, &r,
+			&PyArray_Type, &q,
+			&PyArray_Type, &reval,
+			&PyArray_Type, &ap))
+    return NULL;
+
+  if (r->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have dimension 2.");
+     return NULL;
+  }
+
+  if (reval->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have dimension 2.");
+     return NULL;
+  }
+
+  if (r->dimensions[1] != 3) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have shape (N, 3).");
+     return NULL;
+  }
+
+  if (reval->dimensions[1] != 3) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have shape (N, 3).");
+     return NULL;
+  }
+
+  if (ap->nd != 1 || ap->dimensions[0] != q->dimensions[0]) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "ap must have shape (N,).");
+     return NULL;
+  }
+
+  phi = mp_direct_ap (r, q, reval, ap);
+
+  return PyArray_Return (phi);
+}
 
 static PyObject *
 direct_2d (PyObject *self, PyObject *args)
@@ -271,6 +312,54 @@ field_direct (PyObject *self, PyObject *args)
   }
 
   efield = mp_field_direct (r, q, reval, a);
+
+  return PyArray_Return (efield);
+}
+
+
+static PyObject *
+field_direct_ap (PyObject *self, PyObject *args)
+{
+  PyArrayObject *r, *q, *reval, *efield, *ap;
+
+  if (!PyArg_ParseTuple(args, "O!O!O!O!", 
+			&PyArray_Type, &r,
+			&PyArray_Type, &q,
+			&PyArray_Type, &reval,
+			&PyArray_Type, &ap))
+    return NULL;
+
+  if (r->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have dimension 2.");
+     return NULL;
+  }
+
+  if (reval->nd != 2) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have dimension 2.");
+     return NULL;
+  }
+
+  if (r->dimensions[1] != 3) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "r must have shape (N, 3).");
+     return NULL;
+  }
+
+  if (reval->dimensions[1] != 3) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "reval must have shape (N, 3).");
+     return NULL;
+  }
+
+  if (ap->nd != 1 || ap->dimensions[0] != q->dimensions[0]) {
+     PyErr_SetString(PyExc_ValueError, 
+		     "ap must have shape (N,).");
+     return NULL;
+  }
+
+  efield = mp_field_direct_ap (r, q, reval, ap);
 
   return PyArray_Return (efield);
 }
@@ -401,6 +490,8 @@ static PyMethodDef mpMethods[] = {
      "Shifts a multipolar expansion to a new point"},
     {"direct",  direct, METH_VARARGS,
      "Directly computes the potential created by a set of charges"},
+    {"direct_ap",  direct_ap, METH_VARARGS,
+     "Directly computes the potential created by a set of charges and variable thickness"},
     {"direct_2d",  direct_2d, METH_VARARGS,
      "Directly computes the potential created by a set of charges in 2d"},
     {"are_near_neighbours",  are_near_neighbours, METH_VARARGS,
@@ -409,6 +500,8 @@ static PyMethodDef mpMethods[] = {
      "Adds two complex matrices and stores the result in the first one"},
     {"field_direct",  field_direct, METH_VARARGS,
      "Directly calculates the electric field from a set of charges"},
+    {"field_direct_ap",  field_direct_ap, METH_VARARGS,
+     "Directly calculates the electric field from a set of charges and variable thickness"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
@@ -416,12 +509,12 @@ static PyMethodDef mpMethods[] = {
 PyMODINIT_FUNC
 initmpolar (void)
 {
-    PyObject *m;
+  PyObject *m;
 
-    m = Py_InitModule ("mpolar", mpMethods);
-    invok_name = "mpolar";
+  m = Py_InitModule ("mpolar", mpMethods);
+  invok_name = "mpolar";
 
-    import_array ();
-    mp_init ();
+  import_array ();
+  mp_init ();
 }
 

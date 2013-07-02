@@ -65,8 +65,12 @@ mp_array *mp_eval_field_array (mp_array* lm, mp_array *r,  int inout);
 mp_array *mp_shift (double x, double y, double z, 
 		    int inout, mp_array *lm);
 mp_array *mp_direct (mp_array *r, mp_array *q, mp_array *reval, double a);
+mp_array *mp_direct_ap (mp_array *r, mp_array *q, mp_array *reval, 
+			mp_array *ap);
 mp_array *mp_direct_2d (mp_array *r, mp_array *q, mp_array *reval, double a);
 mp_array *mp_field_direct (mp_array *r, mp_array *q, mp_array *reval, double a);
+mp_array *mp_field_direct_ap (mp_array *r, mp_array *q, mp_array *reval, 
+			      mp_array *ap);
 
 /* efield.c */
 void ef_efield (double dx, double dy, double dz, mp_array *phi, 

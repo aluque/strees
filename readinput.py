@@ -50,13 +50,28 @@ def positive(func):
     return f
 
 
-# These are decorators to check allowed values.
 def nonnegative(func):
     """ A decorator to constraint the parameter to nonnegative values. """
     def f(s):
         r = func(s)
         if r < 0:
             raise ValueError("%s must be positive" % func.func_name)
+        return r
+    
+    f.__doc__ = func.__doc__
+    f.func_name = func.func_name
+
+    return f
+
+def boolean(func):
+    """ A decorator to check that the parameter can be interpreted as a
+    boolean. """
+    choices = {'true', 'false'}
+    def f(s):
+        if not s.lower() in choices:
+            raise ValueError("%s must be a boolean" % func.func_name)
+
+        r = func(s)
         return r
     
     f.__doc__ = func.__doc__

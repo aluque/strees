@@ -4,7 +4,7 @@ and is responsible for converting to the appropriate type, checking for
 allowed values.  The docstring of the function is a description of the
 parameter. """
 
-from readinput import positive, nonnegative, default
+from readinput import positive, nonnegative, default, boolean
 
 def run_name(s):
     """ Name of the run. """
@@ -132,6 +132,7 @@ def fixed_branching_angle(s):
     return float(s)
 
 @default(False)
+@boolean
 def branch_in_xz(s):
     """ If true, branches always within the XZ plane. """
     return (s.lower() == 'true')
@@ -161,6 +162,7 @@ def max_step(s):
 
 
 @default(True)
+@boolean
 def end_with_reconnection(s):
     """ If true, finishes when a reconnection is detected """
     return (s.lower() == 'true')
@@ -170,6 +172,7 @@ def end_with_reconnection(s):
 # Parameters for the simulation of sprites
 #
 @default(False)
+@boolean
 def sprites(s):
     """ If true, implements the sprite-simulation functionality. """
     return (s.lower() == 'true')
@@ -179,12 +182,45 @@ def scale_height(s):
     """ Scale height of the densities. """
     return float(s)
 
+@default(-1)
+def conductivity_scale_exponent(s):
+    """ Exponent of the scaling of streamer radius with n. """
+    return float(s)
+
+
+@default(1e-3)
+@nonnegative
+def trans_break_time(s):
+    """ The typical time of transversal breakdown probability density. """
+    return float(s)
+
+@default(1e3)
+@nonnegative
+def trans_break_length(s):
+    """ The typical length of transversal breakdown probability density. """
+    return float(s)
+
+@default(4.0)
+@positive
+def trans_break_alpha(s):
+    """ Exponent of the transversal breakdown probability. """
+    return float(s)
+
 @default(0.0)
+@nonnegative
+def trans_break_field(s):
+    """ Exponent of the transversal breakdown probability. """
+    return float(s)
+
+
+@default(0.0)
+@nonnegative
 def tau_1(s):
     """ Decay time scale of the cloud-to-ground current. """
     return float(s)
 
 @default(0.0)
+@nonnegative
 def tau_2(s):
     """ Rise time scale of the cloud-to-ground current. """
     return float(s)
@@ -205,6 +241,7 @@ def charge_total(s):
     return float(s)
 
 @default(2)
+@nonnegative
 def charge_reflections(s):
     """ Number of charge reflection of each sign in each direction. """
     return int(s)

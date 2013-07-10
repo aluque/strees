@@ -143,12 +143,15 @@ def adapt_step(tr, r0, q0, t, dt, p=0.0):
     to make sure that the length of a channel is never longer than ``MAX_STEP``.
     """
     current_dt = dt
+    current_t = t
     r, q = r0, q0
     remaining_steps = 1
     while remaining_steps > 0:
         try:
-            r, q = step(tr, r, q, t, current_dt, p=p) 
+            r, q = step(tr, r, q, current_t, current_dt, p=p) 
+            print "t = %g; dt = %g" % (current_t, current_dt)
             remaining_steps -= 1
+            current_t += current_dt
         except TooLongTimestep:
             current_dt /= 2.
             remaining_steps *= 2
@@ -186,23 +189,55 @@ def step(tr, r, q0, t, dt, p=0.0):
     q1 = relax(box, tr, r, q0, t, dt)
 
     # 3. Calculate the velocities again at t + dt
-    v1 = velocities(box, tr, r, q1, t)
+    v1 = velocities(box, tr, r, q1, t + dt)
 
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
     
-    # 5. Branch some of the tips
-    vabs = sqrt(sum(v**2, axis=1))
+    # 5. Advance the tips and branch some of them
+    rnew, qnew = advance(tr, r, q1, v, dt, p=p, iterm=iterm)
+    
+    # 6. Add emerging upward streamers (for sprites)
+    if SPRITES:
+        rnew, qnew = upward_streamers(tr, qnew, rnew, t, dt)
 
-    # If the longest step is longer than MAX_STEP, raise an exception
-    # telling the calling function to reduce dt.
-    if (max(vabs) * dt) > MAX_STEP:
-        raise TooLongTimestep
+    return rnew, qnew
+
+
+
+def advance(tr, r, q, v, dt, p=0.0, iterm=None):
+    """ Advances the tree by adding new nodes, one per each terminal
+    node if it is not branching, two if it branches.
+
+    Aguments:
+
+      * *tr*: the :class:`tree.Tree` instance containing the tree structure.
+              Note that this will be updated to allow for the newly created
+              nodes.
+      * *r*: an array containing the node locations.
+      * *q*: an array containing the node charges.
+      * *v*: an array containing the velocities of the terminal nodes.
+      * *dt*: the time step.
+      * *p*: The branching rate.
+      * *iterm*: If given, the indices of the terminal nodes. If none, 
+                 they will be calculated from *tr*.
+    
+    """
+
+    if iterm is None:
+        iterm = tr.terminals()
+
+    vabs = sqrt(sum(v**2, axis=1))
 
     if not SPRITES:
         theta = 1
     else:
         theta = sprite_theta(r[iterm, :])
+
+    # If the longest step is longer than MAX_STEP, raise an exception
+    # telling the calling function to reduce dt.
+    if (max(vabs) * dt > MAX_STEP / theta).any():
+        raise TooLongTimestep
 
     does_branch = rand(*iterm.shape) < (theta * p * vabs * dt)
 
@@ -225,11 +260,91 @@ def step(tr, r, q0, t, dt, p=0.0):
             j += 2
     
     rnew = concatenate((r, radv), axis=0)
-    qnew = concatenate((q1, zeros((sum(does_branch) 
-                                   + sum(vabs > 0),))), axis=0)
+    qnew = concatenate((q, zeros((sum(does_branch) 
+                                  + sum(vabs > 0),))), axis=0)
     
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
+    return rnew, qnew
+
+has_upward = False
+def upward_streamers(tr, q, r, t, dt):
+    """ Decides if new upward-propagating streamers will emerge from the
+    body of the streamer tree.  This is a key point for the simulation
+    of carrot sprites. """
+    
+    global has_upward
+
+    if has_upward:
+        return r, q
+
+    p = tr.parents()
+    l = tr.lengths(r)
+
+    # We consider that the charge contained in one segment is half of
+    # each of the charges at its two extremes.
+    qsegment = 0.5 * (q + q[p])
+    lmbd = qsegment / l
+
+    if not SPRITES:
+        theta = 1
+    else:
+        midpoints = tr.midpoints(r)
+        theta = sprite_theta(midpoints)
+
+    # The radial field created by the charges in the tree.
+    er = MAXWELL_FACTOR * lmbd * theta / (2 * CONDUCTOR_THICKNESS)
+    e0 = TRANS_BREAK_FIELD * theta
+    t0 = TRANS_BREAK_TIME / theta
+    l0 = TRANS_BREAK_LENGTH / theta
+
+    # This is the rate of transversal breakdown at each segment
+    # Now we allow trans. breakdown only from negatively charged segments.
+    # Yes, one can drop theta above, but it helps me seeing them there
+    w = l * (abs(er / e0) ** TRANS_BREAK_ALPHA - 1) / t0 / l0
+    w[:] = where(er < 0, w, 0)
+
+    print "max(er / e0) = {:g}".format(nanmax(where(er < 0, abs(er/e0), 0)))
+
+    ibranches = nonzero(rand(*w.shape) < w * dt)[0]
+
+    if len(ibranches) == 0:
+        # Nothing to do here
+        return r, q
+
+    radv = empty((len(ibranches), 3))
+    field0 = mpolar.field_direct_ap(r, q, r[ibranches, :], 
+                                    CONDUCTOR_THICKNESS / theta)
+    field = MAXWELL_FACTOR * field0 + external_field(r[ibranches, :], t)
+
+    for i, ib in enumerate(ibranches):
+        # Skip the terminal nodes.
+        if not tr.segments[ib].children:
+            continue
+
+        # This would generate a random perp. initial direction:
+        e1, e2 = perp_basis(r[ib] - r[p[ib]])
+        phi = 2 * pi * rand()
+        enew = e1 * cos(phi) + e2 * sin(phi)
+        vabs = TIP_MOBILITY * er[ib]
+        if SPRITES:
+            vabs /= theta[ib]
+        radv[i, :] = r[ib] + enew * vabs * dt
+
+        # This is to follow the (-) local electric field but does not look into
+        # the repulsion from the channel
+        # radv[i, :] = r[ib] - TIP_MOBILITY * field[i] * dt
+        print "New upward branch!"
+        print "r[ib] = ", r[ib]
+        print "radv[i] = ", radv[i, :] 
+
+        has_upward = True
+
+
+    rnew = concatenate((r, radv), axis=0)
+    qnew = concatenate((q, zeros((len(ibranches),))), axis=0)
+    tr.extend(ibranches)
+
     return rnew, qnew
 
 
@@ -261,9 +376,17 @@ def velocities(box, tr, r, q, t):
                                            CONDUCTOR_THICKNESS / theta)
 
     sfields = self_fields(tr, r, q)
-    E = (MAXWELL_FACTOR * field
-         + MAXWELL_FACTOR * sfields
-         + external_field(r[iterm, :], t))
+    # The sign(q) appears because we allow negative streamers to propagate
+    # upwards.
+    E = (sign(q[iterm][:, newaxis]) 
+         * (MAXWELL_FACTOR * field + external_field(r[iterm, :], t))
+         + MAXWELL_FACTOR * sfields)
+
+    flt = q[iterm] < 0
+    print "z = ", r[iterm, 2][flt]
+    print "F  = ", MAXWELL_FACTOR * field[flt]
+    print "E0 = ", external_field(r[iterm, :][flt, :], t)
+    print "SF = ", MAXWELL_FACTOR * sfields[flt]
 
     absE = sqrt(sum(E**2, axis=1))
 
@@ -295,7 +418,9 @@ def self_fields(tr, r, q):
     
     theta2 = 1 if not SPRITES else sprite_theta(r[iterm, :])[:, newaxis]**2
 
-    return q[iterm][:, newaxis] * u / (CONDUCTOR_THICKNESS**2 / theta2)
+    # We take here the abs of q because the self-fields point always
+    # to the advacement of the streamer.
+    return abs(q[iterm][:, newaxis]) * u / (CONDUCTOR_THICKNESS**2 / theta2)
 
 
 def relax(box, tr, r, q0, t, dt):
@@ -317,7 +442,7 @@ def relax(box, tr, r, q0, t, dt):
     fix = [] if ELECTRODE is None else [0]
     
     if SPRITES:
-        factor = 1 / sprite_theta(tr.midpoints(r))
+        factor = (sprite_theta(tr.midpoints(r)) ** CONDUCTIVITY_SCALE_EXPONENT)
     else:
         factor = None
 
@@ -384,16 +509,7 @@ def symmetric_gaussian(dr, sigma):
     symmetric gaussian distribution; the two branching points are dr1 and
     its symmetric vector wrt dr. """
 
-    u = dr / norm(dr)
-    # We find two unit vectors orthonormal to u (also dr); note that this
-    # fails if u is parallel to x !!!
-    
-    ex = array([1.0, 0, 0])
-
-    e1 = ex - dot(u, ex) * u
-    e1 = e1 / norm(e1)
-    
-    e2 = cross(u, e1)
+    e1, e2 = perp_basis(dr)
 
     if not BRANCH_IN_XZ:
         p, q = sigma * randn(2)
@@ -414,6 +530,25 @@ def symmetric_gaussian(dr, sigma):
         dr2 *= norm(dr) / norm(dr2)
 
     return dr1, dr2
+
+
+def perp_basis(v):
+    """ Returns two vectors e1, e2 such that (e1, e2, v/|v|) is an orthonormal
+    basis. """
+
+    u = v / norm(v)
+    # We find two unit vectors orthonormal to u (also dr); note that this
+    # fails if u is parallel to x !!!
+    
+    ex = array([1.0, 0, 0])
+
+    e1 = ex - dot(u, ex) * u
+    e1 = e1 / norm(e1)
+    
+    e2 = cross(u, e1)
+
+    return e1, e2
+
 
 
 def external_field(r, t):

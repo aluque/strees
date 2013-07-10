@@ -70,12 +70,12 @@ def main():
         SPRITE_RS, SPRITE_QS = sprite_charge_sources()
 
     # init a tree from scratch
-    tr, r0, q0 = init_from_scratch(INITIAL_NODES)
+    tr, dist0 = init_from_scratch(INITIAL_NODES)
     
     dt = TIME_STEP
     t = r_[0:END_TIME:dt]
     
-    r, q = r0, q0
+    dist = dist0
 
     dfile = DataFile(OUT_FILE, parameters=parameters)
     branched = False
@@ -101,18 +101,18 @@ def main():
                     branch_prob = inf
                     branched = True
 
-        r, q = adapt_step(tr, r, q, it, dt, p=branch_prob)
+        dist = adapt_step(tr, dist, it, dt, p=branch_prob)
 
         with ContextTimer("saving %d" % i):
             # Mon Jul  1 20:41:57 2013: COMPAT. BREAKING.
             # From now on, I will store the full potential, not
             # only the self-constistent potential, which only had
             # sense when debugging.
-            phi = solve_phi(r, q) + external_potential(r, it)
-            dfile.add_step(it, tr, r, q, phi,
+            phi = solve_phi(dist) + external_potential(dist.r, it)
+            dfile.add_step(it, tr, dist, phi,
                            error=error, error_dq=error_dq)
             
-        if END_WITH_RECONNECTION and tr.reconnects(r):
+        if END_WITH_RECONNECTION and tr.reconnects(dist):
             print "Finishing due to a reconnection."
             break
     
@@ -134,31 +134,32 @@ def init_from_scratch(n=0):
     r0[:, Z] = -arange(k) * CONDUCTOR_THICKNESS
 
     q0 = zeros((k, ))
+    dist = tree.Distribution(r=r0, q=q0)
 
-    return tr, r0, q0
+    return tr, dist
 
     
-def adapt_step(tr, r0, q0, t, dt, p=0.0):
+def adapt_step(tr, dist0, t, dt, p=0.0):
     """ Performs a step of duration dt but divides it into sub steps
     to make sure that the length of a channel is never longer than ``MAX_STEP``.
     """
     current_dt = dt
     current_t = t
-    r, q = r0, q0
+    dist = dist0
     remaining_steps = 1
     while remaining_steps > 0:
         try:
-            r, q = step(tr, r, q, current_t, current_dt, p=p) 
+            dist = step(tr, dist, current_t, current_dt, p=p) 
             print "t = %g; dt = %g" % (current_t, current_dt)
             remaining_steps -= 1
             current_t += current_dt
         except TooLongTimestep:
             current_dt /= 2.
             remaining_steps *= 2
-    return r, q
+    return dist
 
 
-def step(tr, r, q0, t, dt, p=0.0):
+def step(tr, dist, t, dt, p=0.0):
     """ Performs an elementary step, including relaxation and advancing
     the channels. 
 
@@ -175,37 +176,37 @@ def step(tr, r, q0, t, dt, p=0.0):
 
     iterm = tr.terminals()
 
-    box = containing_box(r, electrode=ELECTRODE)
-    box.set_charges(r, q0,
+    box = containing_box(dist.r, electrode=ELECTRODE)
+    box.set_charges(dist.r, dist.q,
                     max_charges=MAX_CHARGES_PER_BOX,
                     min_length=16 * CONDUCTOR_THICKNESS)
     box.build_lists(recurse=True)
-    box.set_field_evaluation(r[iterm, :])
+    box.set_field_evaluation(dist.r[iterm, :])
 
     # 1. Calculate the velocities at t
-    v0 = velocities(box, tr, r, q0, t)
+    v0 = velocities(box, tr, dist, t)
 
     # 2. Relax the tree from t to t + dt
-    q1 = relax(box, tr, r, q0, t, dt)
+    dist1 = relax(box, tr, dist, t, dt)
 
     # 3. Calculate the velocities again at t + dt
-    v1 = velocities(box, tr, r, q1, t + dt)
+    v1 = velocities(box, tr, dist, t + dt)
 
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
     
     # 5. Advance the tips and branch some of them
-    rnew, qnew = advance(tr, r, q1, v, dt, p=p, iterm=iterm)
+    dist_new = advance(tr, dist1, v, dt, p=p, iterm=iterm)
     
     # 6. Add emerging upward streamers (for sprites)
     if SPRITES:
-        rnew, qnew = upward_streamers(tr, qnew, rnew, t, dt)
+        dist_new = upward_streamers(tr, dist_new, t, dt)
 
-    return rnew, qnew
+    return dist_new
 
 
 
-def advance(tr, r, q, v, dt, p=0.0, iterm=None):
+def advance(tr, dist, v, dt, p=0.0, iterm=None):
     """ Advances the tree by adding new nodes, one per each terminal
     node if it is not branching, two if it branches.
 
@@ -214,8 +215,7 @@ def advance(tr, r, q, v, dt, p=0.0, iterm=None):
       * *tr*: the :class:`tree.Tree` instance containing the tree structure.
               Note that this will be updated to allow for the newly created
               nodes.
-      * *r*: an array containing the node locations.
-      * *q*: an array containing the node charges.
+      * *dist*: The distribution of r, q, etc in the tree.
       * *v*: an array containing the velocities of the terminal nodes.
       * *dt*: the time step.
       * *p*: The branching rate.
@@ -232,7 +232,7 @@ def advance(tr, r, q, v, dt, p=0.0, iterm=None):
     if not SPRITES:
         theta = 1
     else:
-        theta = sprite_theta(r[iterm, :])
+        theta = sprite_theta(dist.r[iterm, :])
 
     # If the longest step is longer than MAX_STEP, raise an exception
     # telling the calling function to reduce dt.
@@ -247,7 +247,7 @@ def advance(tr, r, q, v, dt, p=0.0, iterm=None):
     for i, branches in enumerate(does_branch):
         if not branches:
             if vabs[i] > 0:
-                radv[j, :] = r[iterm[i], :] + dt * v[i, :]
+                radv[j, :] = dist.r[iterm[i], :] + dt * v[i, :]
                 j += 1
         else:
             # Note that slow channels, although unlikely, may branch.
@@ -255,20 +255,20 @@ def advance(tr, r, q, v, dt, p=0.0, iterm=None):
             factor = 1 if not SPRITES else 1 / theta[i]
             dr1, dr2 = symmetric_gaussian(dt * v[i, :], 
                                           factor * BRANCHING_SIGMA)
-            radv[j, :] = r[iterm[i], :] + dr1
-            radv[j + 1, :] = r[iterm[i], :] + dr2
+            radv[j, :] = dist.r[iterm[i], :] + dr1
+            radv[j + 1, :] = dist.r[iterm[i], :] + dr2
             j += 2
     
-    rnew = concatenate((r, radv), axis=0)
-    qnew = concatenate((q, zeros((sum(does_branch) 
-                                  + sum(vabs > 0),))), axis=0)
+    rnew = concatenate((dist.r, radv), axis=0)
+    qnew = concatenate((dist.q, zeros((sum(does_branch) 
+                                       + sum(vabs > 0),))), axis=0)
     
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
-    return rnew, qnew
+    return tree.Distribution(r=rnew, q=qnew)
 
 has_upward = False
-def upward_streamers(tr, q, r, t, dt):
+def upward_streamers(tr, dist, t, dt):
     """ Decides if new upward-propagating streamers will emerge from the
     body of the streamer tree.  This is a key point for the simulation
     of carrot sprites. """
@@ -276,20 +276,20 @@ def upward_streamers(tr, q, r, t, dt):
     global has_upward
 
     if has_upward:
-        return r, q
+        return dist
 
     p = tr.parents()
-    l = tr.lengths(r)
+    l = tr.lengths(dist)
 
     # We consider that the charge contained in one segment is half of
     # each of the charges at its two extremes.
-    qsegment = 0.5 * (q + q[p])
+    qsegment = 0.5 * (dist.q + dist.q[p])
     lmbd = qsegment / l
 
     if not SPRITES:
         theta = 1
     else:
-        midpoints = tr.midpoints(r)
+        midpoints = tr.midpoints(dist)
         theta = sprite_theta(midpoints)
 
     # The radial field created by the charges in the tree.
@@ -310,12 +310,12 @@ def upward_streamers(tr, q, r, t, dt):
 
     if len(ibranches) == 0:
         # Nothing to do here
-        return r, q
+        return dist
 
     radv = empty((len(ibranches), 3))
-    field0 = mpolar.field_direct_ap(r, q, r[ibranches, :], 
+    field0 = mpolar.field_direct_ap(dist.r, dist.q, dist.r[ibranches, :], 
                                     CONDUCTOR_THICKNESS / theta)
-    field = MAXWELL_FACTOR * field0 + external_field(r[ibranches, :], t)
+    field = MAXWELL_FACTOR * field0 + external_field(dist.r[ibranches, :], t)
 
     for i, ib in enumerate(ibranches):
         # Skip the terminal nodes.
@@ -323,19 +323,19 @@ def upward_streamers(tr, q, r, t, dt):
             continue
 
         # This would generate a random perp. initial direction:
-        e1, e2 = perp_basis(r[ib] - r[p[ib]])
+        e1, e2 = perp_basis(dist.r[ib] - dist.r[p[ib]])
         phi = 2 * pi * rand()
         enew = e1 * cos(phi) + e2 * sin(phi)
         vabs = TIP_MOBILITY * er[ib]
         if SPRITES:
             vabs /= theta[ib]
-        radv[i, :] = r[ib] + enew * vabs * dt
+        radv[i, :] = dist.r[ib] + enew * vabs * dt
 
         # This is to follow the (-) local electric field but does not look into
         # the repulsion from the channel
         # radv[i, :] = r[ib] - TIP_MOBILITY * field[i] * dt
         print "New upward branch!"
-        print "r[ib] = ", r[ib]
+        print "r[ib] = ", dist.r[ib]
         print "radv[i] = ", radv[i, :] 
 
         has_upward = True
@@ -345,10 +345,10 @@ def upward_streamers(tr, q, r, t, dt):
     qnew = concatenate((q, zeros((len(ibranches),))), axis=0)
     tr.extend(ibranches)
 
-    return rnew, qnew
+    return tree.Distribution(r=rnew, q=qnew)
 
 
-def velocities(box, tr, r, q, t):
+def velocities(box, tr, dist, t):
     """ Calculates the electric fields at the tips of the tree and from
     them obtains the propagation velocities of the *streamers* """
 
@@ -356,11 +356,11 @@ def velocities(box, tr, r, q, t):
 
     # When we have a single charge the velocity is simply given by the
     # external electric field
-    if len(q) == 1:
-        return TIP_MOBILITY * external_field(r[iterm, :], t)
+    if len(dist.q) == 1:
+        return TIP_MOBILITY * external_field(dist.r[iterm, :], t)
     
-    if len(q) >= FMM_THRESHOLD and box is not None:
-        box.update_charges(q)
+    if len(dist.q) >= FMM_THRESHOLD and box is not None:
+        box.update_charges(dist.q)
         box.upward(MULTIPOLAR_TERMS)
         box.downward()
         box.solve_all(a=CONDUCTOR_THICKNESS, field=True)
@@ -369,23 +369,24 @@ def velocities(box, tr, r, q, t):
         field = box.field
     else:
         if not SPRITES:
-            field = mpolar.field_direct(r, q, r[iterm, :], CONDUCTOR_THICKNESS)
+            field = mpolar.field_direct(dist.r, dist.q, dist.r[iterm, :], 
+                                        CONDUCTOR_THICKNESS)
         else:
-            theta = sprite_theta(r)
-            field = mpolar.field_direct_ap(r, q, r[iterm, :], 
+            theta = sprite_theta(dist.r)
+            field = mpolar.field_direct_ap(dist.r, dist.q, dist.r[iterm, :], 
                                            CONDUCTOR_THICKNESS / theta)
 
-    sfields = self_fields(tr, r, q)
+    sfields = self_fields(tr, dist)
     # The sign(q) appears because we allow negative streamers to propagate
     # upwards.
-    E = (sign(q[iterm][:, newaxis]) 
-         * (MAXWELL_FACTOR * field + external_field(r[iterm, :], t))
+    E = (sign(dist.q[iterm][:, newaxis]) 
+         * (MAXWELL_FACTOR * field + external_field(dist.r[iterm, :], t))
          + MAXWELL_FACTOR * sfields)
 
-    flt = q[iterm] < 0
-    print "z = ", r[iterm, 2][flt]
+    flt = dist.q[iterm] < 0
+    print "z = ", dist.r[iterm, 2][flt]
     print "F  = ", MAXWELL_FACTOR * field[flt]
-    print "E0 = ", external_field(r[iterm, :][flt, :], t)
+    print "E0 = ", external_field(dist.r[iterm, :][flt, :], t)
     print "SF = ", MAXWELL_FACTOR * sfields[flt]
 
     absE = sqrt(sum(E**2, axis=1))
@@ -398,7 +399,7 @@ def velocities(box, tr, r, q, t):
         vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD, 
                                     absE - TIP_MIN_FIELD, 0)
     else:
-        theta = sprite_theta(r[iterm, :])
+        theta = sprite_theta(dist.r[iterm, :])
         vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD * theta, 
                                     absE - TIP_MIN_FIELD * theta, 0) / theta
     v = u * vabs[:, newaxis]
@@ -406,31 +407,31 @@ def velocities(box, tr, r, q, t):
     return v
 
 
-def self_fields(tr, r, q):
+def self_fields(tr, dist):
     """ Calculates the fields created by the charges at the streamer tips
     on themselves. """
     
     iterm = tr.terminals()
     parents = tr.parents()[iterm]
     
-    dr = r[iterm, :] - r[parents, :]
+    dr = dist.r[iterm, :] - dist.r[parents, :]
     u = dr / (sqrt(sum(dr**2, axis=1)))[:, newaxis]
     
-    theta2 = 1 if not SPRITES else sprite_theta(r[iterm, :])[:, newaxis]**2
+    theta2 = 1 if not SPRITES else sprite_theta(dist.r[iterm, :])[:, newaxis]**2
 
     # We take here the abs of q because the self-fields point always
     # to the advacement of the streamer.
-    return abs(q[iterm][:, newaxis]) * u / (CONDUCTOR_THICKNESS**2 / theta2)
+    return (abs(dist.q[iterm][:, newaxis]) * u 
+            / (CONDUCTOR_THICKNESS**2 / theta2))
 
 
-def relax(box, tr, r, q0, t, dt):
+def relax(box, tr, dist, t, dt):
     """ Relax the conductor :class:`tree.Tree` *tr* for a time *dt*. 
 
     Arguments:
 
       * *tr*: the :class:`tree.Tree` instance containing the tree structure.
-      * *r*: an array containing the node locations.
-      * *q0*: an array containing the charges of the nodes.
+      * *dist*: The tree distribution in a Distribution namedtuple.
       * *t*: Initial time of the time-step.
       * *dt*: the time step.
     """
@@ -442,40 +443,41 @@ def relax(box, tr, r, q0, t, dt):
     fix = [] if ELECTRODE is None else [0]
     
     if SPRITES:
-        factor = (sprite_theta(tr.midpoints(r)) ** CONDUCTIVITY_SCALE_EXPONENT)
+        factor = (sprite_theta(tr.midpoints(dist)) 
+                  ** CONDUCTIVITY_SCALE_EXPONENT)
     else:
         factor = None
 
     # On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know
     # where it comes from.  Probably it was a reliq of the mid-points approach
     # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
-    M = CONDUCTANCE * tr.ohm_matrix(r, factor=factor, fix=fix)
-    n = len(q0)
+    M = CONDUCTANCE * tr.ohm_matrix(dist, factor=factor, fix=fix)
+    n = len(dist.q)
     
     def f(t0, q):
         global latest_phi, error, error_dq
 
-        phi = solve_phi(r, q, box)
+        phi = solve_phi(tree.Distribution(dist.r, q), box)
         # err = sqrt(sum((phi - box.phi)**2)) / len(phi)        
         latest_phi = phi
         error = phi - latest_phi
         error_dq = M.dot(error)
         
-        dq = M.dot(phi + external_potential(r, t + t0))
+        dq = M.dot(phi + external_potential(dist.r, t + t0))
 
         return dq
 
     d = ode(f).set_integrator('vode',  nsteps=250000, rtol=1e-8)
-    d.set_initial_value(q0, 0.0)
+    d.set_initial_value(dist.q, 0.0)
     d.integrate(dt)
 
-    return d.y
+    return tree.Distribution(r=dist.r, q=d.y)
 
 
-def solve_phi(r, q, box=None):
-    if len(q) >= FMM_THRESHOLD and box is not None:
+def solve_phi(dist, box=None):
+    if len(dist.q) >= FMM_THRESHOLD and box is not None:
         # with ContextTimer("FMM") as ct_fmm: 
-        box.update_charges(q)
+        box.update_charges(dist.q)
 
         box.upward(MULTIPOLAR_TERMS)
         box.downward()
@@ -487,16 +489,17 @@ def solve_phi(r, q, box=None):
     else:
         # with ContextTimer("direct") as ct_direct:
         if ELECTRODE is None:
-            rx, qx = r, q
+            distx = dist
         else:
-            rx, qx = ELECTRODE.extend(r, q)
+            rx, qx = ELECTRODE.extend(dist.r, dist.q)
+            distx = tree.Distribution(r=rx, q=qx)
 
         if not SPRITES:
-            phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, r,
+            phi0 = MAXWELL_FACTOR * mpolar.direct(distx.r, distx.q, dist.r,
                                                   CONDUCTOR_THICKNESS)
         else:
-            theta = sprite_theta(rx)
-            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(rx, qx, r,
+            theta = sprite_theta(distx.r)
+            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(distx.r, distx.q, dist.r,
                                                 CONDUCTOR_THICKNESS / theta)
         phi = phi0
 

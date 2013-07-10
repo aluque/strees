@@ -2,6 +2,7 @@
 """
 from numpy import *
 
+import tree
 X, Y, Z = 0, 1, 2
 
 class Electrode(object):
@@ -16,7 +17,7 @@ class Electrode(object):
 
     def extend(self, r, q):
         rimag, qimag = self.images(r, q)
-
+        
         return concatenate((r, rimag), axis=0), r_[q, qimag]
     
     
@@ -57,7 +58,7 @@ class Sphere(Electrode):
         y = sqrt(sum(dr**2, axis=1))
         
         yp = self.a2 / y
-        qp = -q * self.a / y
+        qp = -dist.q * self.a / y
         rp = self.center[newaxis, :] + dr * yp / y
 
         return rp, qp

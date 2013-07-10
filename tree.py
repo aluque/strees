@@ -3,9 +3,16 @@ Note that we separate the structure of the branched tree from its
 realization, that would contain things such as charges, positions, etc.
 that evolve even when the structure is fixed.
 """
+from collections import namedtuple
+
 from random import random as uniform
 from scipy.sparse import lil_matrix, csr_matrix
 from numpy import *
+
+# The topology of the tree is stored in a Tree object.  Its status, however,
+# including the locations of the endpoints, the charges, radii, etc
+# is stored in this named tuple.
+Distribution = namedtuple('Distribution', ['r', 'q'])
 
 class Tree(object):
     """ Instances of the Tree class contain the topological information
@@ -94,32 +101,32 @@ class Tree(object):
             return zeros((self.n, dim))
 
 
-    def lengths(self, endpoints):
+    def lengths(self, dist):
         """ Returns an array with the segment lengths of the tree, given
         an array with the *endpoints*. """
         
         parents = self.parents()
         
-        l = sqrt(sum((endpoints - endpoints[parents, :])**2, axis=1))
+        l = sqrt(sum((dist.r - dist.r[parents, :])**2, axis=1))
         return l
 
 
-    def midpoints(self, endpoints):
+    def midpoints(self, dist):
         """ Returns an array with the segment midpoints of the tree, given
         an array with the *endpoints*. """
 
         parents = self.parents()
-        return 0.5 * (endpoints + endpoints[parents, :])
+        return 0.5 * (dist.r + dist.r[parents, :])
     
 
-    def ohm_matrix(self, endpoints, factor=None, fix=[]):
+    def ohm_matrix(self, dist, factor=None, fix=[]):
         """ Builds a matrix M that will provide the evolution of charges
         in every segment of the tree as dq/dt = M . phi, where phi is
         the potential at the center of each segment and '.' is the dot product.
         This function builds the matrix from scratch.  Usually it is much
         better to keep updating the matrix as the tree grows.
 
-        * *endpoints* must contain an array with the endpoints.
+        * *dist.r* must contain an array with the endpoints.
         * *factor* if it is not ``None``, multiplies the conductivity
           of each segment by this factor (it can be an array).  This is
           used to simulate sprites.
@@ -127,7 +134,7 @@ class Tree(object):
           usually that means the root node.
         
         """
-        l = self.lengths(endpoints)
+        l = self.lengths(dist)
         linv = 1.0 / l
         
         if factor is not None:
@@ -181,23 +188,23 @@ class Tree(object):
         return labels
 
     
-    def branch_distance(self, endpoints, dist=None, segment=None,
+    def branch_distance(self, dist, s=None, segment=None,
                         lengths=None):
         """ Returns an array with the distance of each node from the
         branching immediately above it. The distance is calculated along the
         branch. """
-        if dist is None:
-            dist = zeros((self.n,), dtype='d')
+        if s is None:
+            s = zeros((self.n,), dtype='d')
 
         if segment is None:
             segment = self.root
         
         if lengths is None:
-            lengths = self.lengths(endpoints)
+            lengths = self.lengths(dist)
             
         l = 0
         while True:
-            dist[segment.index] = l
+            s[segment.index] = l
             l += lengths[segment.index]
             
             if len(segment.children) != 1:
@@ -206,32 +213,32 @@ class Tree(object):
             segment = segment.children[0]
         
         for i, c in enumerate(segment.children):
-            self.branch_distance(endpoints, dist, segment=c, lengths=lengths)
+            self.branch_distance(dist, s=s, segment=c, lengths=lengths)
 
-        return dist
+        return s
 
 
-    def reconnects(self, endpoints, rmin=5e-4, dmin=1e-3):
+    def reconnects(self, dist, rmin=5e-4, dmin=1e-3):
         """ Finds reconnections in a tree. """
         
         term = array(self.terminals())
-        rterm = endpoints[term, :]
+        rterm = dist.r[term, :]
 
         labels = self.branch_label()
         lterm = labels[term]
 
-        dist = self.branch_distance(endpoints)
-        dterm = dist[term]
+        ls = self.branch_distance(dist)
+        dterm = ls[term]
 
 
         # We look only at node pairs where one of the node is a terminal.
-        r2 = sum((rterm[newaxis, :, :] - endpoints[:, newaxis, :])**2, axis=2)
+        r2 = sum((rterm[newaxis, :, :] - dist.r[:, newaxis, :])**2, axis=2)
         dlabel = lterm[newaxis, :] - labels[:, newaxis]
 
         # These still include branching events, which are very close but
         # close to the branching points
         s = logical_and(dlabel != 0, r2 <= rmin**2)
-        t = logical_and(dterm[newaxis, :] > dmin, dist[:, newaxis] > dmin)
+        t = logical_and(dterm[newaxis, :] > dmin, ls[:, newaxis] > dmin)
         u = logical_and(s, t)
 
         i, j = nonzero(u)

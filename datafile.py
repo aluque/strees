@@ -7,7 +7,7 @@ from contextlib import closing
 from numpy import *
 import h5py
 
-from tree import Tree
+import tree
 
 class DataFile(object):
     """ Class to store and retrieve simulation data. """
@@ -27,7 +27,7 @@ class DataFile(object):
         self.step = 0
 
 
-    def add_step(self, t, tree, r, q, phi, **kwargs):
+    def add_step(self, t, tree, dist, phi, **kwargs):
         """ Adds a step to the file. """
 
         g = self.main.create_group('%.5d' % self.step)
@@ -36,8 +36,10 @@ class DataFile(object):
         g.attrs['timestamp'] = time.time()
         g.attrs['t'] = t
         
-        g.create_dataset('r', data=r, compression='gzip')
-        g.create_dataset('q', data=q, compression='gzip')
+        for field in dist._fields:
+            g.create_dataset(field, data=getattr(dist, field), 
+                             compression='gzip')
+
         g.create_dataset('phi', data=phi, compression='gzip')
 
         parents = tree.parents()
@@ -61,13 +63,15 @@ def load_tree(file, step):
         # Let's assume that we received an open h5file
         parents = array(file['main/%s/parents' % step])
         r = array(file['main/%s/r' % step])
-        tr = Tree.from_parents(parents)
-        return tr, r
+        q = array(file['main/%s/q' % step])
+
+        tr = tree.Tree.from_parents(parents)
+        return tr, tree.Distribution(r, q)
 
     except TypeError:
         with closing(h5py.File(file)) as fp:
-            tr, r = load_tree(fp, step)
+            tr, dist = load_tree(fp, step)
 
-        return tr, r
+        return tr, dist
 
 

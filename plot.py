@@ -10,6 +10,7 @@ import h5py
 import datafile
 
 import cmaps
+import tree
 
 try:
     import pylab
@@ -53,10 +54,14 @@ class DataContainer(object):
         return self.main.attrs[key]
 
     def load_step(self, step):
-        self.tr, self.r = datafile.load_tree(self.fp, step)        
-        self.r[:, 2] += self['ionosphere_height']
+        self.tr, self.dist = datafile.load_tree(self.fp, step)        
+        
+        self.dist.r[:, 2] += self['ionosphere_height']
+
+        self.r = self.dist.r
+        self.q = self.dist.q
+
         self.phi = array(self.main[step]['phi'])
-        self.q = array(self.main[step]['q'])
 
     @property
     def steps(self):
@@ -370,8 +375,8 @@ def main():
 @variable(name="$E$", units="V/m")
 def field(data):
     p = data.tr.parents()
-    l = data.tr.lengths(data.r)
-    midpoints = data.tr.midpoints(data.r)
+    l = data.tr.lengths(data.dist)
+    midpoints = data.tr.midpoints(data.dist)
     t = data.tr.terminals()
     n = len(t)
 
@@ -387,8 +392,8 @@ def field(data):
 @variable(name="$E/n$", units="Td")
 def en(data):
     p = data.tr.parents()
-    l = data.tr.lengths(data.r)
-    midpoints = data.tr.midpoints(data.r)
+    l = data.tr.lengths(data.dist)
+    midpoints = data.tr.midpoints(data.dist)
     t = data.tr.terminals()
     n = len(t)
 
@@ -405,8 +410,8 @@ def en(data):
 @variable(name="$\lambda$", units="C/m")
 def charge(data):
     p = data.tr.parents()
-    l = data.tr.lengths(data.r)
-    midpoints = data.tr.midpoints(data.r)
+    l = data.tr.lengths(data.dist)
+    midpoints = data.tr.midpoints(data.dist)
     t = data.tr.terminals()
     n = len(t)
 
@@ -426,10 +431,10 @@ def phi(data):
 @variable(name="$E_\perp$", units="V/m")
 def eperp(data):
     p = data.tr.parents()
-    l = data.tr.lengths(data.r)
+    l = data.tr.lengths(data.dist)
     qsegment = 0.5 * (data.q + data.q[p])
     lmbd = qsegment / l
-    midpoints = data.tr.midpoints(data.r)
+    midpoints = data.tr.midpoints(data.dist)
 
     if not data['sprites']:
         theta = 1

@@ -3,16 +3,57 @@ Note that we separate the structure of the branched tree from its
 realization, that would contain things such as charges, positions, etc.
 that evolve even when the structure is fixed.
 """
-from collections import namedtuple
-
 from random import random as uniform
 from scipy.sparse import lil_matrix, csr_matrix
 from numpy import *
 
-# The topology of the tree is stored in a Tree object.  Its status, however,
-# including the locations of the endpoints, the charges, radii, etc
-# is stored in this named tuple.
-Distribution = namedtuple('Distribution', ['r', 'q'])
+class Distribution(object):
+    """  The topology of the tree is stored in a Tree object.  Its status, 
+    however, including the locations of the endpoints, the charges, radii, etc
+    is stored in this class.
+    r -> endpoint locations
+    q -> charges
+    a -> radius
+    s -> line conductivity """
+    __slots__ = ['r', 'q', 'a', 's']
+
+    def __init__(self, r, q, a, s):
+        self.r = r
+        self.q = self.promote(q)
+        self.a = self.promote(a)
+        self.s = self.promote(s)
+
+
+    def append(self, other):
+        """ Returns a new distribution joining other. """
+        r = concatenate((self.r, other.r), axis=0)
+        q = concatenate((self.q, other.q), axis=0)
+        a = concatenate((self.a, other.a), axis=0)
+        s = concatenate((self.s, other.s), axis=0)
+
+        return Distribution(r, q, a, s)
+
+
+    def append2(self, *args, **kwargs):
+        return self.append(Distribution(*args, **kwargs))
+
+
+    def promote(self, v):
+        """ Checks if v is a scalar.  If it is, promotes it to an array
+        of size (self.r.shape[0],).  We can take the appropriate dimension
+        of r because it never makes sense to initialize r as a scalar. """
+        if isscalar(v):
+            return zeros((self.r.shape[0],)) + v
+        else:
+            return v
+
+    def update(self, **kwargs):
+        slots = {}
+        for field in self.__slots__:
+            slots[field] = kwargs.get(field, getattr(self, field))
+
+        return Distribution(**slots)
+
 
 class Tree(object):
     """ Instances of the Tree class contain the topological information

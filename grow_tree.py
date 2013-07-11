@@ -133,8 +133,7 @@ def init_from_scratch(n=0):
 
     r0[:, Z] = -arange(k) * CONDUCTOR_THICKNESS
 
-    q0 = zeros((k, ))
-    dist = tree.Distribution(r=r0, q=q0)
+    dist = tree.Distribution(r=r0, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
 
     return tr, dist
 
@@ -259,13 +258,11 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
             radv[j + 1, :] = dist.r[iterm[i], :] + dr2
             j += 2
     
-    rnew = concatenate((dist.r, radv), axis=0)
-    qnew = concatenate((dist.q, zeros((sum(does_branch) 
-                                       + sum(vabs > 0),))), axis=0)
-    
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
-    return tree.Distribution(r=rnew, q=qnew)
+
+    return dist.append2(r=radv, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
+
 
 has_upward = False
 def upward_streamers(tr, dist, t, dt):
@@ -341,11 +338,9 @@ def upward_streamers(tr, dist, t, dt):
         has_upward = True
 
 
-    rnew = concatenate((r, radv), axis=0)
-    qnew = concatenate((q, zeros((len(ibranches),))), axis=0)
     tr.extend(ibranches)
 
-    return tree.Distribution(r=rnew, q=qnew)
+    return dist.append2(r=radv, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
 
 
 def velocities(box, tr, dist, t):
@@ -431,7 +426,7 @@ def relax(box, tr, dist, t, dt):
     Arguments:
 
       * *tr*: the :class:`tree.Tree` instance containing the tree structure.
-      * *dist*: The tree distribution in a Distribution namedtuple.
+      * *dist*: The tree distribution in a :class:`tree.Distribution` instance.
       * *t*: Initial time of the time-step.
       * *dt*: the time step.
     """
@@ -457,7 +452,7 @@ def relax(box, tr, dist, t, dt):
     def f(t0, q):
         global latest_phi, error, error_dq
 
-        phi = solve_phi(tree.Distribution(dist.r, q), box)
+        phi = solve_phi(dist.update(q=q), box)
         # err = sqrt(sum((phi - box.phi)**2)) / len(phi)        
         latest_phi = phi
         error = phi - latest_phi
@@ -471,7 +466,7 @@ def relax(box, tr, dist, t, dt):
     d.set_initial_value(dist.q, 0.0)
     d.integrate(dt)
 
-    return tree.Distribution(r=dist.r, q=d.y)
+    return dist.update(q=d.y)
 
 
 def solve_phi(dist, box=None):
@@ -489,17 +484,16 @@ def solve_phi(dist, box=None):
     else:
         # with ContextTimer("direct") as ct_direct:
         if ELECTRODE is None:
-            distx = dist
+            rx, qx = dist.r, dist.q
         else:
             rx, qx = ELECTRODE.extend(dist.r, dist.q)
-            distx = tree.Distribution(r=rx, q=qx)
 
         if not SPRITES:
-            phi0 = MAXWELL_FACTOR * mpolar.direct(distx.r, distx.q, dist.r,
+            phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, dist.r,
                                                   CONDUCTOR_THICKNESS)
         else:
-            theta = sprite_theta(distx.r)
-            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(distx.r, distx.q, dist.r,
+            theta = sprite_theta(rx)
+            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(rx, qx, dist.r,
                                                 CONDUCTOR_THICKNESS / theta)
         phi = phi0
 

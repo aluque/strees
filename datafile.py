@@ -36,7 +36,7 @@ class DataFile(object):
         g.attrs['timestamp'] = time.time()
         g.attrs['t'] = t
         
-        for field in dist._fields:
+        for field in dist.__slots__:
             g.create_dataset(field, data=getattr(dist, field), 
                              compression='gzip')
 
@@ -62,11 +62,12 @@ def load_tree(file, step):
     try:
         # Let's assume that we received an open h5file
         parents = array(file['main/%s/parents' % step])
-        r = array(file['main/%s/r' % step])
-        q = array(file['main/%s/q' % step])
+        slots = {}
+        for field in tree.Distribution.__slots__:
+            slots[field] = array(file['main/%s/%s' % (step, field)])
 
         tr = tree.Tree.from_parents(parents)
-        return tr, tree.Distribution(r, q)
+        return tr, tree.Distribution(**slots)
 
     except TypeError:
         with closing(h5py.File(file)) as fp:

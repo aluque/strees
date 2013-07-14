@@ -176,10 +176,10 @@ class Tree(object):
         
         """
         l = self.lengths(dist)
-        linv = 1.0 / l
+        sigma = dist.s / l
         
         if factor is not None:
-            linv[:] = linv * factor
+            sigma[:] = sigma * factor
 
         # We build the matrix in LIL format first, later we convert to a
         # format more efficient for matrix-vector multiplications
@@ -190,13 +190,13 @@ class Tree(object):
             m = 0.0
             for other in segment.children:
                 j = other.index
-                M[i, j] = linv[j]
-                m -= linv[j]
+                M[i, j] = sigma[j]
+                m -= sigma[j]
 
             if segment.parent is not None:
                 j = segment.parent.index
-                M[i, j] = linv[i]
-                m -= linv[i]     
+                M[i, j] = sigma[i]
+                m -= sigma[i]     
 
             M[i, i] = m
 

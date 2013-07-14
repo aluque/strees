@@ -261,7 +261,10 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
 
-    return dist.append2(r=radv, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
+    theta_adv = 1 if not SPRITES else sprite_theta(radv)
+    a = CONDUCTOR_THICKNESS / theta_adv
+    s = CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
+    return dist.append2(r=radv, q=0, a=a, s=s)
 
 
 has_upward = False
@@ -339,8 +342,13 @@ def upward_streamers(tr, dist, t, dt):
 
 
     tr.extend(ibranches)
+    # Here assuming that +/- streamers are the same.  This has to be changed
+    # later.
+    theta_adv = 1 if not SPRITES else sprite_theta(radv)
+    a = CONDUCTOR_THICKNESS / theta_adv
+    s = CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
 
-    return dist.append2(r=radv, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
+    return dist.append2(r=radv, q=0, a=a, s=s)
 
 
 def velocities(box, tr, dist, t):
@@ -446,7 +454,7 @@ def relax(box, tr, dist, t, dt):
     # On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know
     # where it comes from.  Probably it was a reliq of the mid-points approach
     # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
-    M = CONDUCTANCE * tr.ohm_matrix(dist, factor=factor, fix=fix)
+    M = tr.ohm_matrix(dist, factor=factor, fix=fix)
     n = len(dist.q)
     
     def f(t0, q):

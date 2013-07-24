@@ -133,7 +133,8 @@ def init_from_scratch(n=0):
 
     r0[:, Z] = -arange(k) * CONDUCTOR_THICKNESS
 
-    dist = tree.Distribution(r=r0, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE)
+    dist = tree.Distribution(r=r0, q=0, a=CONDUCTOR_THICKNESS, s=CONDUCTANCE,
+                             p=+1)
 
     return tr, dist
 
@@ -241,14 +242,14 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     does_branch = rand(*iterm.shape) < (theta * p * vabs * dt)
 
     radv = empty((sum(does_branch) + sum(vabs > 0), 3))
-    tsign = empty((sum(does_branch) + sum(vabs > 0),), dtype='i')
+    polarity = empty((sum(does_branch) + sum(vabs > 0),), dtype='i')
     j = 0
     
     for i, branches in enumerate(does_branch):
         if not branches:
             if vabs[i] > 0:
                 radv[j, :] = dist.r[iterm[i], :] + dt * v[i, :]
-                tsign[j] = sign(dist.q[iterm[i]])
+                polarity[j] = dist.p[iterm[i]]
                 j += 1
         else:
             # Note that slow channels, although unlikely, may branch.
@@ -258,20 +259,20 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
                                           factor * BRANCHING_SIGMA)
             radv[j, :] = dist.r[iterm[i], :] + dr1
             radv[j + 1, :] = dist.r[iterm[i], :] + dr2
-            tsign[j] = tsign[j + 1] = sign(dist.q[iterm[i]])
+            polarity[j] = polarity[j + 1] = dist.p[iterm[i]]
             j += 2
     
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
 
     theta_adv = 1 if not SPRITES else sprite_theta(radv)
-    a = (where(tsign > 0, CONDUCTOR_THICKNESS, NEGATIVE_CONDUCTOR_THICKNESS)
+    a = (where(polarity > 0, CONDUCTOR_THICKNESS, NEGATIVE_CONDUCTOR_THICKNESS)
          / theta_adv)
 
-    s = (where(tsign > 0, CONDUCTANCE, NEGATIVE_CONDUCTANCE) 
+    s = (where(polarity > 0, CONDUCTANCE, NEGATIVE_CONDUCTANCE) 
          * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT))
 
-    return dist.append2(r=radv, q=0, a=a, s=s)
+    return dist.append2(r=radv, q=0, a=a, s=s, p=polarity)
 
 
 has_upward = False
@@ -355,7 +356,7 @@ def upward_streamers(tr, dist, t, dt):
     a = NEGATIVE_CONDUCTOR_THICKNESS / theta_adv
     s = NEGATIVE_CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
 
-    return dist.append2(r=radv, q=0, a=a, s=s)
+    return dist.append2(r=radv, q=0, a=a, s=s, p=-1)
 
 
 def velocities(box, tr, dist, t):

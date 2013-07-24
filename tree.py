@@ -14,15 +14,17 @@ class Distribution(object):
     r -> endpoint locations
     q -> charges
     a -> radius
-    s -> line conductivity """
-    __slots__ = ['r', 'q', 'a', 's']
+    s -> line conductivity 
+    p -> polarity.
+    """
+    __slots__ = ['r', 'q', 'a', 's', 'p']
 
-    def __init__(self, r, q, a, s):
+    def __init__(self, r, q, a, s, p):
         self.r = r
         self.q = self.promote(q)
         self.a = self.promote(a)
         self.s = self.promote(s)
-
+        self.p = self.promote(p)
 
     def append(self, other):
         """ Returns a new distribution joining other. """
@@ -30,8 +32,9 @@ class Distribution(object):
         q = concatenate((self.q, other.q), axis=0)
         a = concatenate((self.a, other.a), axis=0)
         s = concatenate((self.s, other.s), axis=0)
+        p = concatenate((self.p, other.p), axis=0)
 
-        return Distribution(r, q, a, s)
+        return Distribution(r, q, a, s, p)
 
 
     def append2(self, *args, **kwargs):

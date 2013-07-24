@@ -15,16 +15,19 @@ class Electrode(object):
 
         raise NotImplementedError
 
-    def extend(self, r, q):
-        rimag, qimag = self.images(r, q)
+    def extend(self, r, q, a):
+        rimag, qimag, aimag = self.images(r, q, a)
         
-        return concatenate((r, rimag), axis=0), r_[q, qimag]
+        if a is not None:
+            a = r_[a, aimag]
+
+        return concatenate((r, rimag), axis=0), r_[q, qimag], a
     
     
 class NullElectrode(object):
     """ Simply a trick to simulate no electrode. """
-    def images(self, r, q):
-        return zeros((0, 3)), zeros((0,))
+    def images(self, r, q, a):
+        return zeros((0, 3)), zeros((0,)), zeros((0,))
     
 
 class Planar(Electrode):
@@ -35,8 +38,8 @@ class Planar(Electrode):
         self.u = ones((3, ))
         self.u[axis] *= -1
 
-    def images(self, r, q):
-        return self.images_r(r), self.images_q(r, q)
+    def images(self, r, q, a):
+        return self.images_r(r), self.images_q(r, q), a
     
     def images_q(self, r, q):
         return -q
@@ -52,7 +55,7 @@ class Sphere(Electrode):
         self.a = a
         self.a2 = a * 2
         
-    def images(self, r, q):
+    def images(self, r, q, a):
         # See e.g. Jackson, 2.2
         dr = r - self.center[newaxis, :]
         y = sqrt(sum(dr**2, axis=1))
@@ -61,7 +64,8 @@ class Sphere(Electrode):
         qp = -dist.q * self.a / y
         rp = self.center[newaxis, :] + dr * yp / y
 
-        return rp, qp
+        raise NotImplementedError("You have to implement imaging of a")
+        #return rp, qp, a
 
 
     def images_q(self, r, q):

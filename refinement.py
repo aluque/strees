@@ -97,7 +97,7 @@ class Box(object):
         # setting the evaluation points because we are not usually interested
         # in evaluating "image fields".
         if self.electrode:
-            self.r, self.q = self.electrode.extend(self.r, self.q)
+            self.r, self.q, _ = self.electrode.extend(self.r, self.q, None)
             self.n = len(self.q)
 
         if (max_charges is not None and self.n > max_charges

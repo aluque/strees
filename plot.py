@@ -436,20 +436,11 @@ def eperp(data):
     lmbd = qsegment / l
     midpoints = data.tr.midpoints(data.dist)
 
-    if not data['sprites']:
-        theta = 1
-    else:
-        theta = exp(-midpoints[:, 2] / data['scale_height'])
-                     
-    er = (data['maxwell_factor'] * lmbd * theta 
-          / (2 * data['conductor_thickness']))
-    emin = data['trans_break_field'] * theta
-    p = er / emin
-
+    er = (2 * data['maxwell_factor'] * lmbd / data.dist.a)
     t = data.tr.terminals()
     n = len(t)
 
-    return midpoints[:-n], p[:-n]
+    return midpoints[:-n], er[:-n]
 
 
 if __name__ == '__main__':

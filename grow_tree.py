@@ -241,12 +241,14 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     does_branch = rand(*iterm.shape) < (theta * p * vabs * dt)
 
     radv = empty((sum(does_branch) + sum(vabs > 0), 3))
+    tsign = empty((sum(does_branch) + sum(vabs > 0),), dtype='i')
     j = 0
     
     for i, branches in enumerate(does_branch):
         if not branches:
             if vabs[i] > 0:
                 radv[j, :] = dist.r[iterm[i], :] + dt * v[i, :]
+                tsign[j] = sign(dist.q[iterm[i]])
                 j += 1
         else:
             # Note that slow channels, although unlikely, may branch.
@@ -256,14 +258,19 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
                                           factor * BRANCHING_SIGMA)
             radv[j, :] = dist.r[iterm[i], :] + dr1
             radv[j + 1, :] = dist.r[iterm[i], :] + dr2
+            tsign[j] = tsign[j + 1] = sign(dist.q[iterm[i]])
             j += 2
     
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
 
     theta_adv = 1 if not SPRITES else sprite_theta(radv)
-    a = CONDUCTOR_THICKNESS / theta_adv
-    s = CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
+    a = (where(tsign > 0, CONDUCTOR_THICKNESS, NEGATIVE_CONDUCTOR_THICKNESS)
+         / theta_adv)
+
+    s = (where(tsign > 0, CONDUCTANCE, NEGATIVE_CONDUCTANCE) 
+         * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT))
+
     return dist.append2(r=radv, q=0, a=a, s=s)
 
 
@@ -275,8 +282,8 @@ def upward_streamers(tr, dist, t, dt):
     
     global has_upward
 
-    if has_upward:
-        return dist
+    # if has_upward:
+    #     return dist
 
     p = tr.parents()
     l = tr.lengths(dist)
@@ -293,7 +300,7 @@ def upward_streamers(tr, dist, t, dt):
         theta = sprite_theta(midpoints)
 
     # The radial field created by the charges in the tree.
-    er = MAXWELL_FACTOR * lmbd * theta / (2 * CONDUCTOR_THICKNESS)
+    er = 2 * MAXWELL_FACTOR * lmbd / dist.a
     e0 = TRANS_BREAK_FIELD * theta
     t0 = TRANS_BREAK_TIME / theta
     l0 = TRANS_BREAK_LENGTH / theta
@@ -301,12 +308,12 @@ def upward_streamers(tr, dist, t, dt):
     # This is the rate of transversal breakdown at each segment
     # Now we allow trans. breakdown only from negatively charged segments.
     # Yes, one can drop theta above, but it helps me seeing them there
-    w = l * (abs(er / e0) ** TRANS_BREAK_ALPHA - 1) / t0 / l0
+    w = (abs(er / e0) ** TRANS_BREAK_ALPHA) / t0 / l0
     w[:] = where(er < 0, w, 0)
 
-    print "max(er / e0) = {:g}".format(nanmax(where(er < 0, abs(er/e0), 0)))
+    print "max(w) = {:g}".format(nanmax(where(er < 0, abs(w), 0)))
 
-    ibranches = nonzero(rand(*w.shape) < w * dt)[0]
+    ibranches = nonzero(rand(*w.shape) < w * l * dt)[0]
 
     if len(ibranches) == 0:
         # Nothing to do here
@@ -314,7 +321,7 @@ def upward_streamers(tr, dist, t, dt):
 
     radv = empty((len(ibranches), 3))
     field0 = mpolar.field_direct_ap(dist.r, dist.q, dist.r[ibranches, :], 
-                                    CONDUCTOR_THICKNESS / theta)
+                                    dist.a)
     field = MAXWELL_FACTOR * field0 + external_field(dist.r[ibranches, :], t)
 
     for i, ib in enumerate(ibranches):
@@ -345,8 +352,8 @@ def upward_streamers(tr, dist, t, dt):
     # Here assuming that +/- streamers are the same.  This has to be changed
     # later.
     theta_adv = 1 if not SPRITES else sprite_theta(radv)
-    a = CONDUCTOR_THICKNESS / theta_adv
-    s = CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
+    a = NEGATIVE_CONDUCTOR_THICKNESS / theta_adv
+    s = NEGATIVE_CONDUCTANCE * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT)
 
     return dist.append2(r=radv, q=0, a=a, s=s)
 
@@ -377,7 +384,7 @@ def velocities(box, tr, dist, t):
         else:
             theta = sprite_theta(dist.r)
             field = mpolar.field_direct_ap(dist.r, dist.q, dist.r[iterm, :], 
-                                           CONDUCTOR_THICKNESS / theta)
+                                           dist.a)
 
     sfields = self_fields(tr, dist)
     # The sign(q) appears because we allow negative streamers to propagate
@@ -419,13 +426,12 @@ def self_fields(tr, dist):
     
     dr = dist.r[iterm, :] - dist.r[parents, :]
     u = dr / (sqrt(sum(dr**2, axis=1)))[:, newaxis]
-    
-    theta2 = 1 if not SPRITES else sprite_theta(dist.r[iterm, :])[:, newaxis]**2
+
 
     # We take here the abs of q because the self-fields point always
     # to the advacement of the streamer.
     return (abs(dist.q[iterm][:, newaxis]) * u 
-            / (CONDUCTOR_THICKNESS**2 / theta2))
+            / (dist.a[iterm][:, newaxis]))
 
 
 def relax(box, tr, dist, t, dt):
@@ -445,16 +451,10 @@ def relax(box, tr, dist, t, dt):
     # M to zero.  
     fix = [] if ELECTRODE is None else [0]
     
-    if SPRITES:
-        factor = (sprite_theta(tr.midpoints(dist)) 
-                  ** CONDUCTIVITY_SCALE_EXPONENT)
-    else:
-        factor = None
-
     # On Fri Aug 31 11:46:47 2012 I found a factor 2 here that I do not know
     # where it comes from.  Probably it was a reliq of the mid-points approach
     # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
-    M = tr.ohm_matrix(dist, factor=factor, fix=fix)
+    M = tr.ohm_matrix(dist, fix=fix)
     n = len(dist.q)
     
     def f(t0, q):
@@ -492,17 +492,16 @@ def solve_phi(dist, box=None):
     else:
         # with ContextTimer("direct") as ct_direct:
         if ELECTRODE is None:
-            rx, qx = dist.r, dist.q
+            rx, qx, ax = dist.r, dist.q, dist.a
         else:
-            rx, qx = ELECTRODE.extend(dist.r, dist.q)
+            rx, qx, ax = ELECTRODE.extend(dist.r, dist.q, dist.a)
 
         if not SPRITES:
             phi0 = MAXWELL_FACTOR * mpolar.direct(rx, qx, dist.r,
                                                   CONDUCTOR_THICKNESS)
         else:
-            theta = sprite_theta(rx)
-            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(rx, qx, dist.r,
-                                                CONDUCTOR_THICKNESS / theta)
+            phi0 = MAXWELL_FACTOR * mpolar.direct_ap(rx, qx, 
+                                                     dist.r, ax)
         phi = phi0
 
     return phi

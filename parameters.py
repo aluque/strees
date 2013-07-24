@@ -58,6 +58,11 @@ def conductance(s):
     """ Conductance of the channels. """
     return float(s)
 
+@positive
+def negative_conductance(s):
+    """ Conductance of the negative channels. """
+    return float(s)
+
 
 @positive
 def maxwell_factor(s):
@@ -99,6 +104,12 @@ def time_step(s):
 @positive
 def conductor_thickness(s):
     """ Thickness of the conductors for the thin-wire approximation. """
+    return float(s)
+
+
+@positive
+def negative_conductor_thickness(s):
+    """ Thickness of the negative streamer channels. """
     return float(s)
 
 

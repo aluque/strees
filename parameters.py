@@ -76,6 +76,12 @@ def tip_mobility(s):
     """ Ratio between the tip velocity of each streamer and the local field. """
     return float(s)
 
+@positive
+def negative_tip_mobility(s):
+    """ Ratio between the tip velocity of each streamer and the local field
+    for negative streamers."""
+    return float(s)
+
 @default(0)
 @nonnegative
 def tip_min_field(s):

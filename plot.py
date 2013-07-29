@@ -329,7 +329,7 @@ def main():
     except OSError:
         pass
 
-    if args.steps is None:
+    if args.steps is None or args.steps == 'all':
         steps = datacontainer.steps
     elif args.steps == 'latest':
         steps = [datacontainer.steps[-1]]
@@ -420,7 +420,7 @@ def charge(data):
 
     q = q / l
     q = where(isfinite(q), q, 0)
-    return midpoints, q
+    return r, q
 
 
 @variable(name="$\phi$", units="V")

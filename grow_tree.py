@@ -272,6 +272,8 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     s = (where(polarity > 0, CONDUCTANCE, NEGATIVE_CONDUCTANCE) 
          * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT))
 
+    print "p = ", polarity
+    
     return dist.append2(r=radv, q=0, a=a, s=s, p=polarity)
 
 
@@ -312,8 +314,6 @@ def upward_streamers(tr, dist, t, dt):
     w = (abs(er / e0) ** TRANS_BREAK_ALPHA) / t0 / l0
     w[:] = where(er < 0, w, 0)
 
-    print "max(w) = {:g}".format(nanmax(where(er < 0, abs(w), 0)))
-
     ibranches = nonzero(rand(*w.shape) < w * l * dt)[0]
 
     if len(ibranches) == 0:
@@ -334,10 +334,10 @@ def upward_streamers(tr, dist, t, dt):
         e1, e2 = perp_basis(dist.r[ib] - dist.r[p[ib]])
         phi = 2 * pi * rand()
         enew = e1 * cos(phi) + e2 * sin(phi)
-        vabs = TIP_MOBILITY * er[ib]
+        vabs = NEGATIVE_TIP_MOBILITY * er[ib]
         if SPRITES:
             vabs /= theta[ib]
-        radv[i, :] = dist.r[ib] + enew * vabs * dt
+        radv[i, :] = dist.r[ib] + enew * dist.a[ib]
 
         # This is to follow the (-) local electric field but does not look into
         # the repulsion from the channel
@@ -390,15 +390,10 @@ def velocities(box, tr, dist, t):
     sfields = self_fields(tr, dist)
     # The sign(q) appears because we allow negative streamers to propagate
     # upwards.
-    E = (sign(dist.q[iterm][:, newaxis]) 
+    E = (dist.p[iterm][:, newaxis]
          * (MAXWELL_FACTOR * field + external_field(dist.r[iterm, :], t))
          + MAXWELL_FACTOR * sfields)
 
-    flt = dist.q[iterm] < 0
-    print "z = ", dist.r[iterm, 2][flt]
-    print "F  = ", MAXWELL_FACTOR * field[flt]
-    print "E0 = ", external_field(dist.r[iterm, :][flt, :], t)
-    print "SF = ", MAXWELL_FACTOR * sfields[flt]
 
     absE = sqrt(sum(E**2, axis=1))
 
@@ -406,15 +401,16 @@ def velocities(box, tr, dist, t):
     u = E / absE[:, newaxis]
 
     # Now we can calculate the absolute value of the velocity
+    mobility = where(dist.p[iterm] > 0, TIP_MOBILITY, NEGATIVE_TIP_MOBILITY)
+
     if not SPRITES:
-        vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD, 
+        vabs = mobility * where(absE > TIP_MIN_FIELD, 
                                     absE - TIP_MIN_FIELD, 0)
     else:
         theta = sprite_theta(dist.r[iterm, :])
-        vabs = TIP_MOBILITY * where(absE > TIP_MIN_FIELD * theta, 
+        vabs = mobility * where(absE > TIP_MIN_FIELD * theta, 
                                     absE - TIP_MIN_FIELD * theta, 0) / theta
     v = u * vabs[:, newaxis]
-    
     return v
 
 

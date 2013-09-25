@@ -405,11 +405,11 @@ def velocities(box, tr, dist, t):
 
     if not SPRITES:
         vabs = mobility * where(absE > TIP_MIN_FIELD, 
-                                    absE - TIP_MIN_FIELD, 0)
+                                absE - TIP_MIN_FIELD, 0)
     else:
         theta = sprite_theta(dist.r[iterm, :])
         vabs = mobility * where(absE > TIP_MIN_FIELD * theta, 
-                                    absE - TIP_MIN_FIELD * theta, 0) / theta
+                                absE - TIP_MIN_FIELD * theta, 0) / theta
     v = u * vabs[:, newaxis]
     return v
 

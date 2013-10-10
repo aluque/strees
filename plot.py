@@ -384,7 +384,6 @@ def field(data):
     midpoints = midpoints[:-n]
 
     efields = (phi - phi[p]) / l
-    print efields[1:]
 
     return midpoints, -efields
 
@@ -426,6 +425,13 @@ def charge(data):
 @variable(name="$\phi$", units="V")
 def phi(data):
     return data.r, data.phi
+
+
+@variable(name="$\sigma$", units="m/$\Omega$")
+def sigma(data):
+    midpoints = data.tr.midpoints(data.dist)
+    print data.dist.s
+    return midpoints, data.dist.s
 
 
 @variable(name="$E_\perp$", units="V/m")

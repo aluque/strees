@@ -28,6 +28,7 @@ from numpy import *
 from numpy.random import rand, randn, seed
 from numpy.linalg import norm
 from scipy.integrate import odeint, ode
+from scipy.interpolate import interp1d
 
 from readinput import load_input
 import tree
@@ -43,6 +44,8 @@ from contexttimer import ContextTimer
 latest_phi = None
 EXTERNAL_FIELD_VECTOR = None
 ELECTRODE = None
+EFFECTIVE_NU_FUNC = None
+
 X, Y, Z = 0, 1, 2
 
 class TooLongTimestep(Exception):
@@ -56,6 +59,7 @@ def main():
     # to the global namespace.
     global EXTERNAL_FIELD_VECTOR, ELECTRODE
     global SPRITE_RS, SPRITE_QS
+    global EFFECTIVE_NU_FUNC
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
@@ -68,6 +72,10 @@ def main():
     # Initialization of sprite fields
     if SPRITES:
         SPRITE_RS, SPRITE_QS = sprite_charge_sources()
+
+    if EFFECTIVE_IONIZATION_RATE_FILE:
+        efield, nu = loadtxt(EFFECTIVE_IONIZATION_RATE_FILE, unpack=True)
+        EFFECTIVE_NU_FUNC = interp1d(efield, nu)        
 
     # init a tree from scratch
     tr, dist0 = init_from_scratch(INITIAL_NODES)
@@ -453,8 +461,19 @@ def relax(box, tr, dist, t, dt):
     # (But it was duplicated in ohm_matrix anyway!).  I am removing it.
     M = tr.ohm_matrix(dist, fix=fix)
     n = len(dist.q)
-    
-    def f(t0, q):
+    l = tr.lengths(dist)
+    nterm = len(tr.terminals())
+
+    if not SPRITES:
+        theta = 1
+    else:
+        theta = sprite_theta(dist.r)
+
+    def f_dq(t0, q):
+        """ This is the integration function that only models the charge 
+        transport; it is used when the user did not specify
+        EFFECTIVE_IONIZATION_RATE_FILE. """
+
         global latest_phi, error, error_dq
 
         phi = solve_phi(dist.update(q=q), box)
@@ -467,11 +486,46 @@ def relax(box, tr, dist, t, dt):
 
         return dq
 
-    d = ode(f).set_integrator('vode',  nsteps=250000, rtol=1e-8)
-    d.set_initial_value(dist.q, 0.0)
-    d.integrate(dt)
+    def f_dsq(t0, sq):
+        """ This is the integration function used when 
+        EFFECTIVE_IONIZATION_RATE_FILE is present.  It is slower because
+        it has to re-compute the Ohm matrix at every call. """
+        global latest_phi, error, error_dq
 
-    return dist.update(q=d.y)
+        s, q = sq[:n], sq[n:]
+        dist0 = dist.update(q=q, s=s)
+        M0 = tr.ohm_matrix(dist0, fix=fix)
+        phi = solve_phi(dist0, box)
+
+        latest_phi = phi
+        error = phi - latest_phi
+        error_dq = M.dot(error)
+
+        parents = tr.parents()
+        eabs = abs((phi - phi[parents]) / l)
+        # The conductivity of the root segment should not beb NaN'd
+        eabs[0] = 0
+        # We also do not update the terminals
+        #eabs[-nterm:] = 0
+
+
+        ds = s * theta * EFFECTIVE_NU_FUNC(eabs / theta)
+        
+        dq = M0.dot(phi + external_potential(dist.r, t + t0))
+
+        return r_[ds, dq]
+
+    nsteps, rtol = 250000, 1e-8
+    if not EFFECTIVE_NU_FUNC:
+        d = ode(f_dq).set_integrator('vode',  nsteps=nsteps, rtol=rtol)
+        d.set_initial_value(dist.q, 0.0)
+        d.integrate(dt)
+        return dist.update(q=d.y)
+    else:
+        d = ode(f_dsq).set_integrator('vode',  nsteps=nsteps, rtol=rtol)
+        d.set_initial_value(r_[dist.s, dist.q], 0.0)
+        d.integrate(dt)
+        return dist.update(s=d.y[:n], q=d.y[n:])
 
 
 def solve_phi(dist, box=None):

@@ -58,6 +58,7 @@ def conductance(s):
     """ Conductance of the channels. """
     return float(s)
 
+@default(0)
 @positive
 def negative_conductance(s):
     """ Conductance of the negative channels. """
@@ -76,6 +77,7 @@ def tip_mobility(s):
     """ Ratio between the tip velocity of each streamer and the local field. """
     return float(s)
 
+@default(0)
 @positive
 def negative_tip_mobility(s):
     """ Ratio between the tip velocity of each streamer and the local field
@@ -113,6 +115,7 @@ def conductor_thickness(s):
     return float(s)
 
 
+@default(0)
 @positive
 def negative_conductor_thickness(s):
     """ Thickness of the negative streamer channels. """
@@ -262,3 +265,8 @@ def charge_total(s):
 def charge_reflections(s):
     """ Number of charge reflection of each sign in each direction. """
     return int(s)
+
+@default('')
+def effective_ionization_rate_file(s):
+    """ A file with the effective ionization rate, with columns E ~ nu. """
+    return s

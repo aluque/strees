@@ -128,6 +128,19 @@ def branching_probability(s):
     return float(s)
 
 
+@default(1)
+@nonnegative
+def branching_radius_ratio(s):
+    """ After branching, ratio of the descendant's radius relative to the parent """
+    return float(s)
+
+@default(1)
+@nonnegative
+def branching_conductance_ratio(s):
+    """ After branching, ratio of the descendant's conductance relative to the parent """
+    return float(s)
+
+
 @positive
 def branching_sigma(s):
     """ Standard deviation of the branching dispacement in the symmetric gaussian branching model. """

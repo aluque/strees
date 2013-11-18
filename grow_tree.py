@@ -251,13 +251,28 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
 
     radv = empty((sum(does_branch) + sum(vabs > 0), 3))
     polarity = empty((sum(does_branch) + sum(vabs > 0),), dtype='i')
+    s = empty_like(polarity, dtype='float64')
+    a = empty_like(polarity, dtype='float64')
+    theta_ratio = empty_like(polarity, dtype='float64')
+
     j = 0
     
+    def sprite_theta_cast(r):
+        return sprite_theta(r[newaxis, :])
+
     for i, branches in enumerate(does_branch):
         if not branches:
             if vabs[i] > 0:
                 radv[j, :] = dist.r[iterm[i], :] + dt * v[i, :]
                 polarity[j] = dist.p[iterm[i]]
+
+                # For sprites: not that we will later apply the correcting
+                # factor for density-dependent s and a
+                s[j] = dist.s[iterm[i]]
+                a[j] = dist.a[iterm[i]]
+
+                theta_ratio[j] = (sprite_theta_cast(radv[j, :]) 
+                                  / sprite_theta_cast(dist.r[iterm[i], :]))
                 j += 1
         else:
             # Note that slow channels, although unlikely, may branch.
@@ -268,18 +283,30 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
             radv[j, :] = dist.r[iterm[i], :] + dr1
             radv[j + 1, :] = dist.r[iterm[i], :] + dr2
             polarity[j] = polarity[j + 1] = dist.p[iterm[i]]
+
+            theta_ratio[j] = (sprite_theta_cast(radv[j, :]) 
+                              / sprite_theta_cast(dist.r[iterm[i], :]))
+            theta_ratio[j + 1] = (sprite_theta_cast(radv[j + 1, :]) 
+                                  / sprite_theta_cast(dist.r[iterm[i], :]))
+
+            s[j] = BRANCHING_CONDUCTANCE_RATIO * dist.s[iterm[i]]
+            s[j + 1] = s[j]
+
+            a[j] = BRANCHING_RADIUS_RATIO * dist.a[iterm[i]]
+            a[j + 1] = a[j]
+
+
             j += 2
     
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
 
-    theta_adv = 1 if not SPRITES else sprite_theta(radv)
-    a = (where(polarity > 0, CONDUCTOR_THICKNESS, NEGATIVE_CONDUCTOR_THICKNESS)
-         / theta_adv)
+    s *= theta_ratio ** CONDUCTIVITY_SCALE_EXPONENT
+    a /= theta_ratio
 
-    s = (where(polarity > 0, CONDUCTANCE, NEGATIVE_CONDUCTANCE) 
-         * (theta_adv ** CONDUCTIVITY_SCALE_EXPONENT))
-
+    print "s = ", s
+    print "a = ", a
+    
     print "p = ", polarity
     
     return dist.append2(r=radv, q=0, a=a, s=s, p=polarity)

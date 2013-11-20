@@ -62,6 +62,7 @@ class DataContainer(object):
         self.q = self.dist.q
 
         self.phi = array(self.main[step]['phi'])
+        self.t = self.main[step].attrs['t']
 
     @property
     def steps(self):
@@ -230,12 +231,33 @@ class CombinedPlot(Plot):
         
         self.mappable = self.subplots[0].mappable
 
-    def finish(self):
+    def finish(self, time=None):
         self.cbar = pylab.colorbar(self.mappable, 
                                    cax=self.cax,
                                    extend='both' if self.truncate 
                                    else 'neither')
+
+        if time is not None:
+            p, f = prefix_and_factor(time)
+            pylab.figtext(0.975, 0.025, "t = %.2g %ss" % (time / f, p),
+                          color="#883333",
+                          ha='right', va='bottom', size='x-large')
+
+def prefix_and_factor(x):
+    prefixes = {
+        -12: 'p',
+        -9: 'n',
+        -6: 'u',
+        -3: 'm',
+         0: '',
+         3: 'k'}
+
+    n = 3 * round(log10(x) / 3)
+    if n in prefixes:
+        return prefixes[n], 10**n
     
+    return '', 1
+
 
 def iter_steps(s):
     """ Iterate over timesteps according to a string that can be
@@ -359,7 +381,7 @@ def main():
         datacontainer.load_step(step)
         r, v = var(datacontainer)
         plot.plot(r, v)
-        plot.finish()
+        plot.finish(time=datacontainer.t)
         if args.show:
             pylab.show()
         else:
@@ -430,7 +452,6 @@ def phi(data):
 @variable(name="$\sigma$", units="m/$\Omega$")
 def sigma(data):
     midpoints = data.tr.midpoints(data.dist)
-    print data.dist.s
     return midpoints, data.dist.s
 
 

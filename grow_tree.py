@@ -203,6 +203,8 @@ def step(tr, dist, t, dt, p=0.0):
     # 4. Extend the tree with the leap-frog algo.
     v = 0.5 * (v0 + v1)
     
+    print "v = ", v
+
     # 5. Advance the tips and branch some of them
     dist_new = advance(tr, dist1, v, dt, p=p, iterm=iterm)
     
@@ -403,7 +405,13 @@ def velocities(box, tr, dist, t):
     # When we have a single charge the velocity is simply given by the
     # external electric field
     if len(dist.q) == 1:
-        return TIP_MOBILITY * external_field(dist.r[iterm, :], t)
+        E = external_field(dist.r[iterm, :], t)
+        absE = sqrt(sum(E**2))
+        print "absE = ", absE
+
+        if absE > TIP_MIN_FIELD:
+            return TIP_MOBILITY * E
+        return array([[0, 0, 0]])
     
     if len(dist.q) >= FMM_THRESHOLD and box is not None:
         box.update_charges(dist.q)

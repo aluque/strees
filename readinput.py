@@ -90,13 +90,17 @@ def default(value):
     return deco
 
 
-def load_input(fname, parameters, d=None, upper=False, raw=False):
+def load_input(fname, parameters, d=None, upper=False, raw=False,
+               sections=None):
     """ Loads an input file and stores its values in the dictionary
     d.   If upper is true, transforms the parameter names to upper case. """
 
     if d is None:
         d = dict()
     
+    if sections is None:
+        sections = ['global', 'parameters']
+
     config = SafeConfigParser()
     defaults = dict(home=os.environ['HOME'],
                     user=os.environ['LOGNAME'],
@@ -107,7 +111,7 @@ def load_input(fname, parameters, d=None, upper=False, raw=False):
                     
     config.read(fname)
     
-    for section in ['global', 'parameters']:
+    for section in sections:
         for name, value in config.items(section, vars=defaults, raw=raw):
             print name, repr(value)
             try:

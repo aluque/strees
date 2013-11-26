@@ -155,8 +155,9 @@ def single_branching_time(s):
 
 
 @default(0)
-def single_branching_z(s):
-    """ If nonzero, performs a single branching at the given z. """
+def threshold_z(s):
+    """ If nonzero, changes the parameters reading from the [lower] section
+    when the streamer reaches this altitude. """
     return float(s)
 
 @default(0)

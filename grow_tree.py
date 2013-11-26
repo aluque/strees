@@ -86,7 +86,7 @@ def main():
     dist = dist0
 
     dfile = DataFile(OUT_FILE, parameters=parameters)
-    branched = False
+    in_lower = False
     
     for i, it in enumerate(t):
         # with ContextTimer("plotting"):
@@ -102,13 +102,18 @@ def main():
                     branch_prob = inf
                     branched = True
 
-        if SINGLE_BRANCHING_Z != 0 and not branched:
-            zterm = r[tr.terminals()[0], Z]
-            if zterm < SINGLE_BRANCHING_Z:
-                if not branched:
-                    branch_prob = inf
-                    branched = True
+        if THRESHOLD_Z != 0 and not in_lower:
+            zterm = dist.r[tr.terminals()[0], Z]
+            if zterm < THRESHOLD_Z - IONOSPHERE_HEIGHT:
+                if not in_lower:                    
+                    in_lower = True
+                    parameters = load_input(sys.argv[1], param_descriptors,
+                                            d=parameters, sections=['lower'])
+                    globals().update(dict((key.upper(), item)
+                                          for key, item 
+                                          in parameters.iteritems()))
 
+            
         dist = adapt_step(tr, dist, it, dt, p=branch_prob)
 
         with ContextTimer("saving %d" % i):

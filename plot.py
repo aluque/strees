@@ -1,8 +1,12 @@
 import sys
 import os, os.path
 from optparse import OptionParser
+from multiprocessing import Pool, Manager
+from functools import partial
+
 from matplotlib.colors import LogNorm
 import matplotlib as mpl
+
 import scipy.constants as co
 from scipy.stats import scoreatpercentile
 from numpy import *
@@ -12,12 +16,16 @@ import datafile
 import cmaps
 import tree
 
+old_backend = mpl.rcParams['backend']
+mpl.rcParams['backend'] = 'Agg'
+
 try:
     import pylab
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.colors
 except ImportError:
     pass
+
 
 AIR_N_STP = co.value('Loschmidt constant (273.15 K, 101.325 kPa)')
 Td = 1e-21
@@ -56,13 +64,15 @@ class DataContainer(object):
     def load_step(self, step):
         self.tr, self.dist = datafile.load_tree(self.fp, step)        
         
-        self.dist.r[:, 2] += self['ionosphere_height']
-
         self.r = self.dist.r
         self.q = self.dist.q
 
         self.phi = array(self.main[step]['phi'])
+
         self.t = self.main[step].attrs['t']
+
+    def close(self):
+        self.fp.close()
 
     @property
     def steps(self):
@@ -76,7 +86,8 @@ class Plot(object):
     LABEL_FORMAT = "{axes} [{units}]"
 
     def __init__(self, axes=None, makefig=True, dynamic=False, 
-                 truncate=False, log=False, lscale=1, lunits='m'):
+                 truncate=False, log=False, lscale=1, lunits='m',
+                 z0=0):
         if axes is None:
             axes = pylab.gca()
 
@@ -89,8 +100,11 @@ class Plot(object):
         self.lscale = lscale
         self.lunits = lunits
         self.truncate = truncate
+        self.z0 = z0
 
     def set_limits(self, vmin=None, vmax=None, v=None, r=None):
+        r = r[:, :] + array([0, 0, self.z0])
+
         if not vmin is None and not vmax is None and v is None:
             self.vmin, self.vmax = vmin, vmax
         elif vmin is None and vmax is None and v is not None:
@@ -134,6 +148,9 @@ class Plot2D(Plot):
     def plot(self, r, v):
         self.axes.clear()
         self.axes.grid(ls='-', lw=1.0, c='#c0c0c0', zorder=-20)
+
+        r = r[:, :] + array([0, 0, self.z0])
+
         isort = argsort(r[:, self.zaxis])
 
         if self.vmin is None:
@@ -142,7 +159,7 @@ class Plot2D(Plot):
         self.mappable = self.axes.scatter(r[isort, self.xaxis] / self.lscale, 
                                           r[isort, self.yaxis] / self.lscale, 
                                           c=v[isort],
-                                          s=14.5, faceted=False,
+                                          s=14.5, linewidth=0,
                                           vmin=self.vmin, vmax=self.vmax,
                                           cmap=self.cmap, zorder=20, 
                                           norm=self.norm)
@@ -172,6 +189,8 @@ class Plot3D(Plot):
         #self.axes.grid(ls='-', lw=1.0, c='#c00000', zorder=0)
         isort = argsort(dot(array([-1, 1, 0]), r.T))
 
+        r = r[:, :] + array([0, 0, self.z0])
+
         if self.vmin is None:
             self.set_limits(v=v, r=r)
 
@@ -179,7 +198,7 @@ class Plot3D(Plot):
                           r[isort, 1] / self.lscale, 
                           r[isort, 2] / self.lscale, 
                           c=v[isort],
-                          s=9.5, zdir='z', faceted=False,
+                          s=9.5, zdir='z', linewidth=0,
                           vmin=self.vmin, vmax=self.vmax,
                           cmap=self.cmap, norm=self.norm)
         
@@ -239,7 +258,7 @@ class CombinedPlot(Plot):
 
         if time is not None:
             p, f = prefix_and_factor(time)
-            pylab.figtext(0.975, 0.025, "t = %.2g %ss" % (time / f, p),
+            pylab.figtext(0.975, 0.025, "t = %7.3f %ss" % (time / f, p),
                           color="#883333",
                           ha='right', va='bottom', size='x-large')
 
@@ -335,14 +354,46 @@ def main():
     parser.add_argument("-d", "--outdir",
                         help="Output directory (may contain {rid} and {var})", 
                         action='store', default='{rid}')
+    parser.add_argument("-c", "--clim",
+                        help="Limits of the color scale as c0:c1", 
+                        action='store', default=None)
     parser.add_argument("-o", "--output",
                         help="Output file (may contain {rid} {step} and {var})", 
                         action='store', default='{rid}_{step}_{var}.png')
+    parser.add_argument("-p", "--processes", type=int,
+                        help="Number of parallel processes to launch (1)", 
+                        action='store', default=1)
 
     args = parser.parse_args()
 
-    var = VARIABLES[args.var]
-    datacontainer = DataContainer(args.input)
+    mkdir_outdir(args)
+    steps = obtain_steps(args)
+    r_ref, v_ref = obtain_ref(args, steps)
+
+    if len(steps) > 1 and args.show:
+        print "For your own good, --show is incompatible with more than 1 plot."
+        sys.exit(-1)
+
+    manager = Manager()
+    lock = manager.Lock()
+
+    if args.show:
+        pylab.switch_backend(old_backend)
+        single_step(lock, args, r_ref, v_ref, steps[0])
+    else:
+        pool = Pool(args.processes)
+        
+        f = partial(single_step, lock, args, r_ref, v_ref)
+        pool.map(f, steps)
+        pool.close()
+        pool.join()
+
+        
+def mkdir_outdir(args):
+    """ Makes the output directory if needed. """
+
+    if args.show:
+        return
 
     rid = os.path.splitext(args.input)[0]
     outdir = args.outdir.format(rid=rid, var=args.var)
@@ -351,6 +402,11 @@ def main():
     except OSError:
         pass
 
+
+def obtain_steps(args):
+    """ Obtain the steps, either from the arguments or from reading the files.
+    """
+    datacontainer = DataContainer(args.input)
     if args.steps is None or args.steps == 'all':
         steps = datacontainer.steps
     elif args.steps == 'latest':
@@ -358,40 +414,67 @@ def main():
     else:
         steps = list(iter_steps(args.steps))
 
+    datacontainer.close()
+    return steps
+
+
+def obtain_ref(args, steps):
+    """ Obtain the reference r and v. """
+    # Set the reference
     if args.ref is None:
         ref = steps[-1]
     else:
         ref = args.ref
 
+    datacontainer = DataContainer(args.input)
+    datacontainer.load_step(ref)
+    var = VARIABLES[args.var]
+    r, v = var(datacontainer)
+    datacontainer.close()
+
+    return r, v
+
+def single_step(lock, args, r_ref, v_ref, step):
+    """ Process a single step. """
+
+    var = VARIABLES[args.var]
+    rid = os.path.splitext(args.input)[0]
+    outdir = args.outdir.format(rid=rid, var=args.var)
+
     pylab.figure(figsize=(13, 10.5))
+
+    lock.acquire()
+    datacontainer = DataContainer(args.input)
+
+    datacontainer.load_step(step)
     plot = CombinedPlot(log=args.log, dynamic=True, 
                         lunits=args.units, lscale=UNITS[args.units],
-                        truncate=args.truncate)
+                        truncate=args.truncate,
+                        z0=datacontainer['ionosphere_height'])
 
-    if len(steps) > 1 and args.show:
-        print "For your own good, --show is incompatible with more than 1 plot."
-        sys.exit(-1)
-
-    # Set the reference
-    datacontainer.load_step(ref)
     r, v = var(datacontainer)
-    plot.set_limits(v=v, r=r)
+    datacontainer.close()
+    lock.release()
 
-    for step in steps:
-        datacontainer.load_step(step)
-        r, v = var(datacontainer)
-        plot.plot(r, v)
-        plot.finish(time=datacontainer.t)
-        if args.show:
-            pylab.show()
-        else:
-            ofile = args.output.format(step=step, var=args.var, rid=rid)
-            ofile = os.path.join(outdir, ofile)
+    if args.clim is None:
+        plot.set_limits(v=v_ref, r=r_ref)
+    else:
+        c0, c1 = [float(x) for x in args.clim.split(':')]
+        plot.set_limits(r=r_ref, vmin=c0, vmax=c1)
 
-            pylab.savefig(ofile)
+    plot.plot(r, v)
+    plot.finish(time=datacontainer.t)
+    if args.show:
+        pylab.show()
+    else:
+        ofile = args.output.format(step=step, var=args.var, rid=rid)
+        ofile = os.path.join(outdir, ofile)
+
+        pylab.savefig(ofile)
             #pylab.close()
-            print "File '%s' saved" % ofile
+        print "File '%s' saved" % ofile
 
+    pylab.close()
 
 
 @variable(name="$E$", units="V/m")
@@ -421,7 +504,8 @@ def en(data):
     p, l, r, phi = p[:-n], l[:-n], data.r[:-n], data.phi[:-n]
     midpoints = midpoints[:-n]
 
-    n = AIR_N_STP * exp(-midpoints[:, 2] / data['scale_height'])
+    n = AIR_N_STP * exp(-(data['ionosphere_height'] + midpoints[:, 2]) 
+                        / data['scale_height'])
     
     efields = (phi - phi[p]) / l
     en = efields / n / Td
@@ -463,7 +547,8 @@ def eperp(data):
     lmbd = qsegment / l
     midpoints = data.tr.midpoints(data.dist)
 
-    er = (2 * data['maxwell_factor'] * lmbd / data.dist.a)
+    theta = exp(-midpoints[:, 2] / data['scale_height'])
+    er = (2 * data['maxwell_factor'] * lmbd / data.dist.a) / theta
     t = data.tr.terminals()
     n = len(t)
 

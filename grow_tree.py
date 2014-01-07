@@ -251,7 +251,7 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
 
     # If the longest step is longer than MAX_STEP, raise an exception
     # telling the calling function to reduce dt.
-    if (max(vabs) * dt > MAX_STEP / theta).any():
+    if (max(vabs) * dt > MAX_STEP).any():
         raise TooLongTimestep
 
     does_branch = rand(*iterm.shape) < (theta * p * vabs * dt)
@@ -542,16 +542,17 @@ def relax(box, tr, dist, t, dt):
         error_dq = M.dot(error)
 
         parents = tr.parents()
-        eabs = abs((phi - phi[parents]) / l)
+        phi_t = phi + external_potential(dist.r, t + t0)
+
+        eabs = abs((phi_t - phi_t[parents]) / l)
         # The conductivity of the root segment should not beb NaN'd
         eabs[0] = 0
         # We also do not update the terminals
         #eabs[-nterm:] = 0
 
-
         ds = s * theta * EFFECTIVE_NU_FUNC(eabs / theta)
-        
-        dq = M0.dot(phi + external_potential(dist.r, t + t0))
+
+        dq = M0.dot(phi_t)
 
         return r_[ds, dq]
 

@@ -61,7 +61,12 @@ def load_tree(file, step):
     """
     try:
         # Let's assume that we received an open h5file
-        parents = array(file['main/%s/parents' % step])
+        try:
+            parents = array(file['main/%s/parents' % step])
+        except KeyError:
+            print "Can't open 'main/%s/parents'" % step
+            raise
+
         slots = {}
         for field in tree.Distribution.__slots__:
             slots[field] = array(file['main/%s/%s' % (step, field)])

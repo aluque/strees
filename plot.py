@@ -17,7 +17,7 @@ import cmaps
 import tree
 
 old_backend = mpl.rcParams['backend']
-mpl.rcParams['backend'] = 'Agg'
+#mpl.rcParams['backend'] = 'Agg'
 
 try:
     import pylab
@@ -87,7 +87,7 @@ class Plot(object):
 
     def __init__(self, axes=None, makefig=True, dynamic=False, 
                  truncate=False, log=False, lscale=1, lunits='m',
-                 z0=0):
+                 z0=0, cmap='jet'):
         if axes is None:
             axes = pylab.gca()
 
@@ -95,7 +95,7 @@ class Plot(object):
         self.makefig = makefig
         self.dynamic = dynamic
         self.vmin, self.vmax = None, None
-        self.cmap = pylab.get_cmap("jet")
+        self.cmap = pylab.get_cmap(cmap)
         self.norm = None if not log else LogNorm()
         self.lscale = lscale
         self.lunits = lunits
@@ -111,8 +111,15 @@ class Plot(object):
             if not self.truncate:
                 self.vmin, self.vmax = nanmin(v), nanmax(v)
             else:
-                self.vmin = -15 * scoreatpercentile(-v[v < 0], 50.)
-                self.vmax =  5  * scoreatpercentile( v[v > 0], 50.)
+                try:
+                    self.vmin = -15 * scoreatpercentile(-v[v < 0], 50.)
+                except ValueError:
+                    self.vmin = nanmin(v)
+
+                try:
+                    self.vmax =  5  * scoreatpercentile( v[v > 0], 50.)
+                except ValueError:
+                    self.vmax = nanmax(v)
 
         else:
             raise ValueError("set_limit called with inconsistent parameters")
@@ -174,6 +181,7 @@ class Plot2D(Plot):
 
         self.axes.set_xlim([self.r0[self.xaxis], self.r1[self.xaxis]])
         self.axes.set_ylim([self.r0[self.yaxis], self.r1[self.yaxis]])
+
 
     def finish(self):
         self.axes.colorbar(self.mappable)
@@ -262,6 +270,8 @@ class CombinedPlot(Plot):
                           color="#883333",
                           ha='right', va='bottom', size='x-large')
 
+
+
 def prefix_and_factor(x):
     prefixes = {
         -12: 'p',
@@ -345,6 +355,12 @@ def main():
     parser.add_argument("--ref", action='store',
                         help="Reference step by default, the latest one",
                         default=None)
+    parser.add_argument("--cmap", action='store',
+                        help="Colormap to use",
+                        default='jet')
+    parser.add_argument("--dynamic", action='store_true',
+                        help="Use a dynamic colormap",
+                        default=False)
     parser.add_argument("--log", action='store_true',
                         help="Use a logarithmic color scale",
                         default=False)
@@ -379,8 +395,13 @@ def main():
 
     if args.show:
         pylab.switch_backend(old_backend)
-        single_step(lock, args, r_ref, v_ref, steps[0])
+
+    if args.show or args.processes == 1:
+        for step in steps:
+            single_step(lock, args, r_ref, v_ref, step)
     else:
+        # Parallel processing.  The problem with this is that we lose the
+        # backtraces of exceptions, so it's harder to debug problems.
         pool = Pool(args.processes)
         
         f = partial(single_step, lock, args, r_ref, v_ref)
@@ -447,9 +468,10 @@ def single_step(lock, args, r_ref, v_ref, step):
     datacontainer = DataContainer(args.input)
 
     datacontainer.load_step(step)
-    plot = CombinedPlot(log=args.log, dynamic=True, 
+    plot = CombinedPlot(log=args.log, dynamic=args.dynamic, 
                         lunits=args.units, lscale=UNITS[args.units],
                         truncate=args.truncate,
+                        cmap=args.cmap,
                         z0=datacontainer['ionosphere_height'])
 
     r, v = var(datacontainer)

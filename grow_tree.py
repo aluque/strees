@@ -267,15 +267,17 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     def sprite_theta_cast(r):
         return sprite_theta(r[newaxis, :])
 
+    lf = layer_factor(dist.r[iterm, :])
+
     for i, branches in enumerate(does_branch):
         if not branches:
             if vabs[i] > 0:
                 radv[j, :] = dist.r[iterm[i], :] + dt * v[i, :]
                 polarity[j] = dist.p[iterm[i]]
 
-                # For sprites: not that we will later apply the correcting
+                # For sprites: note that we will later apply the correcting
                 # factor for density-dependent s and a
-                s[j] = dist.s[iterm[i]]
+                s[j] = dist.s[iterm[i]] / lf[i]
                 a[j] = dist.a[iterm[i]]
 
                 theta_ratio[j] = (sprite_theta_cast(radv[j, :]) 
@@ -296,7 +298,7 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
             theta_ratio[j + 1] = (sprite_theta_cast(radv[j + 1, :]) 
                                   / sprite_theta_cast(dist.r[iterm[i], :]))
 
-            s[j] = BRANCHING_CONDUCTANCE_RATIO * dist.s[iterm[i]]
+            s[j] = BRANCHING_CONDUCTANCE_RATIO * dist.s[iterm[i]] / lf[i]
             s[j + 1] = s[j]
 
             a[j] = BRANCHING_RADIUS_RATIO * dist.a[iterm[i]]
@@ -308,7 +310,7 @@ def advance(tr, dist, v, dt, p=0.0, iterm=None):
     tr.extend(sort(r_[iterm[vabs > 0], 
                       iterm[does_branch]]))
 
-    s *= theta_ratio ** CONDUCTIVITY_SCALE_EXPONENT
+    s *= theta_ratio ** CONDUCTIVITY_SCALE_EXPONENT * layer_factor(radv)
     a /= theta_ratio
 
     print "s = ", s
@@ -548,7 +550,7 @@ def relax(box, tr, dist, t, dt):
         # The conductivity of the root segment should not beb NaN'd
         eabs[0] = 0
         # We also do not update the terminals
-        #eabs[-nterm:] = 0
+        eabs[-nterm:] = 0
 
         ds = s * theta * EFFECTIVE_NU_FUNC(eabs / theta)
 
@@ -793,6 +795,11 @@ def sprite_charge_sources():
     return rs, qs
 
 
+def layer_factor(r):
+    z0 = LAYER_HEIGHT - IONOSPHERE_HEIGHT
+
+    return (1 + LAYER_AMPLITUDE * exp(-(r[:, 2] - z0)**2 
+                                      / LAYER_WIDTH**2))
 
 
 def plot_projections(r, q):

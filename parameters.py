@@ -284,3 +284,19 @@ def charge_reflections(s):
 def effective_ionization_rate_file(s):
     """ A file with the effective ionization rate, with columns E ~ nu. """
     return s
+
+
+@default(0.0)
+def layer_height(s):
+    """ We will introduce an atmospheric layer at this altitude. """
+    return float(s)
+
+@default(0.0)
+def layer_width(s):
+    """ Width of the atmospheric layer. """
+    return float(s)
+
+@default(0.0)
+def layer_amplitude(s):
+    """ The atmospheric layer peak multiplying factor at the layer is 1 + layer_amplitude. """
+    return float(s)

@@ -87,7 +87,7 @@ class Plot(object):
 
     def __init__(self, axes=None, makefig=True, dynamic=False, 
                  truncate=False, log=False, lscale=1, lunits='m',
-                 z0=0, cmap='jet'):
+                 z0=0, cmap='jet', nsteps=0):
         if axes is None:
             axes = pylab.gca()
 
@@ -101,6 +101,8 @@ class Plot(object):
         self.lunits = lunits
         self.truncate = truncate
         self.z0 = z0
+        self.streak = 0
+        self.nsteps = nsteps
 
     def set_limits(self, vmin=None, vmax=None, v=None, r=None):
         r = r[:, :] + array([0, 0, self.z0])
@@ -130,8 +132,15 @@ class Plot(object):
             
         if r is not None:
             self.r0, self.r1 = bounding_box(r)
+            
             self.r0 /= self.lscale
             self.r1 /= self.lscale
+
+            self.L = self.r1[0] - self.r0[0]
+            self.r1 += array([self.L, self.L, 0])
+
+    def set_streak(self, streak):
+        self.streak = streak
 
     def plot(self):
         raise NotImplementedError("You must subclass Plot")
@@ -153,8 +162,9 @@ class Plot2D(Plot):
     
 
     def plot(self, r, v):
-        self.axes.clear()
-        self.axes.grid(ls='-', lw=1.0, c='#c0c0c0', zorder=-20)
+        if self.streak == 0:
+            self.axes.clear()
+            self.axes.grid(ls='-', lw=1.0, c='#c0c0c0', zorder=-20)
 
         r = r[:, :] + array([0, 0, self.z0])
 
@@ -162,6 +172,9 @@ class Plot2D(Plot):
 
         if self.vmin is None:
             self.set_limits(v=v, r=r)
+
+        shift = self.streak * self.L / self.nsteps
+        r = r[:, :] + (self.lscale * array([shift, shift, 0]))
 
         self.mappable = self.axes.scatter(r[isort, self.xaxis] / self.lscale, 
                                           r[isort, self.yaxis] / self.lscale, 
@@ -247,7 +260,13 @@ class CombinedPlot(Plot):
                          Plot2D('xyz', axes=self.axes[2], **kwargs),
                          Plot3D(axes=self.axes[3], **kwargs)]
         self.cax = pylab.axes([0.88, 0.1, 0.025, 0.85])
+        self.time = None
 
+    def set_streak(self, streak):
+        self.streak = streak
+        for p in self.subplots:
+            p.set_streak(streak)
+        
     def set_limits(self, *args, **kwargs):
         for p in self.subplots:
             p.set_limits(*args, **kwargs)
@@ -258,15 +277,15 @@ class CombinedPlot(Plot):
         
         self.mappable = self.subplots[0].mappable
 
-    def finish(self, time=None):
+    def finish(self):
         self.cbar = pylab.colorbar(self.mappable, 
                                    cax=self.cax,
                                    extend='both' if self.truncate 
                                    else 'neither')
 
-        if time is not None:
-            p, f = prefix_and_factor(time)
-            pylab.figtext(0.975, 0.025, "t = %7.3f %ss" % (time / f, p),
+        if self.time is not None:
+            p, f = prefix_and_factor(self.time)
+            pylab.figtext(0.975, 0.025, "t = %7.3f %ss" % (self.time / f, p),
                           color="#883333",
                           ha='right', va='bottom', size='x-large')
 
@@ -364,6 +383,9 @@ def main():
     parser.add_argument("--log", action='store_true',
                         help="Use a logarithmic color scale",
                         default=False)
+    parser.add_argument("--streak", action='store_true',
+                        help="Plot a 'streak' image",
+                        default=False)
     parser.add_argument("--truncate", action='store_true',
                         help="Truncate the color scale",
                         default=False)
@@ -384,9 +406,11 @@ def main():
 
     mkdir_outdir(args)
     steps = obtain_steps(args)
+    nsteps = len(steps) if args.streak else 1
+
     r_ref, v_ref = obtain_ref(args, steps)
 
-    if len(steps) > 1 and args.show:
+    if len(steps) > 1 and args.show and not args.streak:
         print "For your own good, --show is incompatible with more than 1 plot."
         sys.exit(-1)
 
@@ -396,9 +420,22 @@ def main():
     if args.show:
         pylab.switch_backend(old_backend)
 
-    if args.show or args.processes == 1:
+    if args.show or args.processes == 1 or args.streak:
+        plot = None
         for step in steps:
-            single_step(lock, args, r_ref, v_ref, step)
+            plot = single_step(lock, args, r_ref, v_ref, step, 
+                               plot=plot, nsteps=nsteps)
+            if not args.show:
+                plot.finish(time=datacontainer.t)
+
+                savefile(args, step)
+                plot = None
+
+        if args.show:
+            plot.finish()
+            pylab.show()
+
+
     else:
         # Parallel processing.  The problem with this is that we lose the
         # backtraces of exceptions, so it's harder to debug problems.
@@ -455,26 +492,25 @@ def obtain_ref(args, steps):
 
     return r, v
 
-def single_step(lock, args, r_ref, v_ref, step):
+def single_step(lock, args, r_ref, v_ref, step, plot=None, nsteps=0):
     """ Process a single step. """
-
     var = VARIABLES[args.var]
-    rid = os.path.splitext(args.input)[0]
-    outdir = args.outdir.format(rid=rid, var=args.var)
-
-    pylab.figure(figsize=(13, 10.5))
 
     lock.acquire()
     datacontainer = DataContainer(args.input)
 
     datacontainer.load_step(step)
-    plot = CombinedPlot(log=args.log, dynamic=args.dynamic, 
-                        lunits=args.units, lscale=UNITS[args.units],
-                        truncate=args.truncate,
-                        cmap=args.cmap,
-                        z0=datacontainer['ionosphere_height'])
-
     r, v = var(datacontainer)
+    if plot is None:
+        pylab.figure(figsize=(13, 10.5))
+        plot = CombinedPlot(log=args.log, dynamic=args.dynamic, 
+                            lunits=args.units, lscale=UNITS[args.units],
+                            truncate=args.truncate,
+                            cmap=args.cmap,
+                            nsteps=nsteps,
+                            z0=datacontainer['ionosphere_height'])
+
+    plot.time = datacontainer.t
     datacontainer.close()
     lock.release()
 
@@ -485,17 +521,24 @@ def single_step(lock, args, r_ref, v_ref, step):
         plot.set_limits(r=r_ref, vmin=c0, vmax=c1)
 
     plot.plot(r, v)
-    plot.finish(time=datacontainer.t)
-    if args.show:
-        pylab.show()
-    else:
-        ofile = args.output.format(step=step, var=args.var, rid=rid)
-        ofile = os.path.join(outdir, ofile)
 
-        pylab.savefig(ofile)
-            #pylab.close()
-        print "File '%s' saved" % ofile
+    plot.set_streak(plot.streak + 1)
+        
+    return plot
 
+
+def savefile(args, step):
+    var = VARIABLES[args.var]
+
+    rid = os.path.splitext(args.input)[0]
+    outdir = args.outdir.format(rid=rid, var=args.var)
+
+    ofile = args.output.format(step=step, var=args.var, rid=rid)
+    ofile = os.path.join(outdir, ofile)
+
+    pylab.savefig(ofile)
+    print "File '%s' saved" % ofile
+        
     pylab.close()
 
 
@@ -559,6 +602,30 @@ def phi(data):
 def sigma(data):
     midpoints = data.tr.midpoints(data.dist)
     return midpoints, data.dist.s
+
+@variable(name="$\sigma n$", units="$m^4/\Omega$")
+def sigman(data):
+    midpoints = data.tr.midpoints(data.dist)
+    n = AIR_N_STP * exp(-(data['ionosphere_height'] + midpoints[:, 2]) 
+                        / data['scale_height'])
+
+    return midpoints, data.dist.s * n
+
+
+@variable(name="$j$", units="$A$")
+def current(data):
+    p = data.tr.parents()
+    l = data.tr.lengths(data.dist)
+    midpoints = data.tr.midpoints(data.dist)
+    t = data.tr.terminals()
+    n = len(t)
+
+    p, l, r, phi = p[:-n], l[:-n], data.r[:-n], data.phi[:-n]
+    s = data.dist.s[:-n]
+    midpoints = midpoints[:-n]
+    efields = (phi - phi[p]) / l
+
+    return midpoints, -efields * s
 
 
 @variable(name="$E_\perp$", units="V/m")

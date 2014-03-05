@@ -45,6 +45,9 @@ latest_phi = None
 EXTERNAL_FIELD_VECTOR = None
 ELECTRODE = None
 EFFECTIVE_NU_FUNC = None
+VELOCITY_FUNC = None
+NEGATIVE_VELOCITY_FUNC = None
+VABS_FUNC = None
 
 X, Y, Z = 0, 1, 2
 
@@ -60,6 +63,9 @@ def main():
     global EXTERNAL_FIELD_VECTOR, ELECTRODE
     global SPRITE_RS, SPRITE_QS
     global EFFECTIVE_NU_FUNC
+    global VELOCITY_FUNC, NEGATIVE_VELOCITY_FUNC
+    global VABS_FUNC
+
     parameters = load_input(sys.argv[1], param_descriptors)
     globals().update(dict((key.upper(), item)
                           for key, item in parameters.iteritems()))
@@ -73,9 +79,24 @@ def main():
     if SPRITES:
         SPRITE_RS, SPRITE_QS = sprite_charge_sources()
 
+    # Loading of the external effective ionization file.
     if EFFECTIVE_IONIZATION_RATE_FILE:
         efield, nu = loadtxt(EFFECTIVE_IONIZATION_RATE_FILE, unpack=True)
-        EFFECTIVE_NU_FUNC = interp1d(efield, nu)        
+        EFFECTIVE_NU_FUNC = interp1d(efield, nu)
+
+    # Loading of the external velocity files.
+    VABS_FUNC = vabs_mobility_based
+    if VELOCITY_FILE:
+        efield, vabs = loadtxt(VELOCITY_FILE, unpack=True)
+        VELOCITY_FUNC = interp1d(efield, vabs)
+
+        if NEGATIVE_VELOCITY_FILE:
+            efield, vabs = loadtxt(NEGATIVE_VELOCITY_FILE, unpack=True)
+            NEGATIVE_VELOCITY_FUNC = interp1d(efield, vabs)        
+        else:
+            NEGATIVE_VELOCITY_FUNC = VELOCITY_FUNC
+
+        VABS_FUNC = vabs_external
 
     # init a tree from scratch
     tr, dist0 = init_from_scratch(INITIAL_NODES)
@@ -186,6 +207,9 @@ def step(tr, dist, t, dt, p=0.0):
       * *dt*: the time step.
 
     """
+    
+    if dt > MAX_STEP_DT:
+        raise TooLongTimestep
 
     iterm = tr.terminals()
 
@@ -450,18 +474,52 @@ def velocities(box, tr, dist, t):
     # An unit vector with the same direction as E
     u = E / absE[:, newaxis]
 
-    # Now we can calculate the absolute value of the velocity
-    mobility = where(dist.p[iterm] > 0, TIP_MOBILITY, NEGATIVE_TIP_MOBILITY)
-
-    if not SPRITES:
-        vabs = mobility * where(absE > TIP_MIN_FIELD, 
-                                absE - TIP_MIN_FIELD, 0)
+    # VABS_FUNC is set in the initialization and may be vabs_mobility_based
+    # or vabs_external.
+    if SPRITES:
+        theta_iterm = sprite_theta(dist.r[iterm, :])
     else:
-        theta = sprite_theta(dist.r[iterm, :])
-        vabs = mobility * where(absE > TIP_MIN_FIELD * theta, 
-                                absE - TIP_MIN_FIELD * theta, 0) / theta
+        theta_iterm = 1
+
+    print "amax(absE) = ", amax(absE)
+
+    vabs = VABS_FUNC(dist.p[iterm], absE, theta_iterm)
+
     v = u * vabs[:, newaxis]
     return v
+
+
+def vabs_mobility_based(p, absE, theta):
+    """ Computes the absolute value of the velocity as function of
+    the polarity (p), |E| and theta.  In this function we use mobilities;
+    this one is invoked if the parameters velocity_file and 
+    negative_velocity_file are absent"""
+
+    # Now we can calculate the absolute value of the velocity
+    mobility = where(p > 0, TIP_MOBILITY, NEGATIVE_TIP_MOBILITY)
+
+    vabs = mobility * where(absE > TIP_MIN_FIELD * theta, 
+                            absE - TIP_MIN_FIELD * theta, 0) / theta
+
+    return vabs
+
+
+def vabs_external(p, absE, theta):
+    """ Computes the absolute value of the velocity as function of
+    the polarity (p), |E| and theta.  This is the function used when
+    velocity_file is present.
+    """
+    pos_vabs = VELOCITY_FUNC(absE / theta)
+    neg_vabs = NEGATIVE_VELOCITY_FUNC(absE / theta)
+    # except ValueError:
+    #     # Usually the reason that we obtain extremely high fields here
+    #     # is that the step is too long.  The step will be discarded anyhow
+    #     # but we need to avoid a crash here.
+    #     raise TooLongTimestep
+
+    vabs = where(p > 0, pos_vabs, neg_vabs)
+
+    return vabs
 
 
 def self_fields(tr, dist):

@@ -194,6 +194,11 @@ def max_step(s):
     to satisfy this constraint"""
     return float(s)
 
+@default(1e10)
+def max_step_dt(s):
+    """ Longest dt for an internal step.  The timestep will be reduced
+    to satisfy this constraint"""
+    return float(s)
 
 @default(True)
 @boolean
@@ -285,6 +290,15 @@ def effective_ionization_rate_file(s):
     """ A file with the effective ionization rate, with columns E ~ nu. """
     return s
 
+@default('')
+def velocity_file(s):
+    """ A file with the velocity as function of E for positive streamers"""
+    return s
+
+@default('')
+def negative_velocity_file(s):
+    """ A file with the velocity as function of E for negative streamers"""
+    return s
 
 @default(0.0)
 def layer_height(s):

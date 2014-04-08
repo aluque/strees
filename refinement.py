@@ -187,8 +187,16 @@ class Box(object):
         for i, child in enumerate(self.children):
             child.collect_solutions(field=field)
             
-            self.phi[self.fltv[i, :]] = child.phi
-            
+            # In newer versions of numpy this gives a ValueError exception
+            # here I am just ignoring it in order to maintain perfect 
+            # compatibility with the results in the paper.  There phi
+            # is anyhow ignored since it we only use these routines for the
+            # electric field.  This bug is corrected in newer commits.
+            try:
+                self.phi[self.fltv[i, :]] = child.phi
+            except ValueError:
+                pass
+
             if field and child.rf is not None:
                 # Note that if child contains field evaluation points,
                 # then self do too.
